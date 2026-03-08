@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>PACO — Smart Packet Processor</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#0f6cbd;--blue-light:#cce3f6;--blue-dark:#0a4a8f;
+  --green:#1a7f3c;--green-bg:#d4edda;
+  --orange:#d97706;--orange-bg:#fef3c7;
+  --red:#dc2626;--red-bg:#fee2e2;
+  --gray-50:#f9fafb;--gray-100:#f3f4f6;--gray-200:#e5e7eb;
+  --gray-300:#d1d5db;--gray-400:#9ca3af;--gray-600:#4b5563;
+  --gray-700:#374151;--gray-900:#111827;
+  --radius:8px;
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--gray-50);color:var(--gray-900);min-height:100vh;font-size:14px;line-height:1.5}
+#app{min-height:100vh;display:flex;flex-direction:column}
+
+/* Header */
+.header{background:#fff;border-bottom:1px solid var(--gray-200);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.header-brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;color:var(--blue-dark)}
+.badge{background:var(--blue);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:.5px}
+.header-user{display:flex;align-items:center;gap:8px;color:var(--gray-600);font-size:13px}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--blue);color:#fff;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center}
+
+/* Stepper */
+.stepper{background:#fff;border-bottom:1px solid var(--gray-200);padding:0 16px;display:flex;align-items:center;overflow-x:auto}
+.step-item{display:flex;align-items:center;gap:7px;padding:13px 12px;white-space:nowrap;color:var(--gray-400);font-size:12px;font-weight:500;border-bottom:2px solid transparent}
+.step-item.active{color:var(--blue);border-bottom-color:var(--blue)}
+.step-item.done{color:var(--green)}
+.step-num{width:20px;height:20px;border-radius:50%;border:2px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.step-item.done .step-num{background:var(--green);border-color:var(--green);color:#fff}
+.step-item.active .step-num{background:var(--blue);border-color:var(--blue);color:#fff}
+.step-arrow{color:var(--gray-300);padding:0 2px;font-size:16px}
+
+/* Layout */
+.main{flex:1;padding:24px;max-width:1100px;margin:0 auto;width:100%}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:18px}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.card-body{padding:18px}
+
+/* Forms */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+label{font-size:11px;font-weight:600;color:var(--gray-700);text-transform:uppercase;letter-spacing:.4px}
+input,select,textarea{border:1px solid var(--gray-300);border-radius:6px;padding:8px 11px;font-size:14px;font-family:inherit;color:var(--gray-900);background:#fff;width:100%;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(15,108,189,.12)}
+input[readonly]{background:var(--gray-100);color:var(--gray-600)}
+textarea{resize:vertical;min-height:80px}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 18px;border-radius:6px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;border:none;transition:all .15s;white-space:nowrap}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:var(--blue-dark)}
+.btn-secondary{background:#fff;color:var(--gray-700);border:1px solid var(--gray-300)}
+.btn-secondary:hover{background:var(--gray-50)}
+.btn-success{background:var(--green);color:#fff}
+.btn-sm{padding:5px 11px;font-size:12px}
+.btn:disabled{opacity:.4;cursor:not-allowed;pointer-events:none}
+
+/* Upload */
+.upload-zone{border:2px dashed var(--gray-300);border-radius:var(--radius);padding:44px 24px;text-align:center;cursor:pointer;transition:all .2s;background:var(--gray-50)}
+.upload-zone:hover,.upload-zone.drag-over{border-color:var(--blue);background:#f0f7ff}
+.upload-icon{font-size:44px;margin-bottom:10px}
+.upload-text{font-size:15px;font-weight:600;color:var(--gray-700);margin-bottom:4px}
+.upload-sub{font-size:13px;color:var(--gray-400)}
+.file-info{background:var(--gray-100);border:1px solid var(--gray-200);border-radius:var(--radius);padding:12px 16px;display:flex;align-items:center;gap:12px;margin-top:14px}
+
+/* Pipeline */
+.pipeline-stage{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:6px;border:1px solid var(--gray-200);background:#fff;margin-bottom:7px;transition:all .3s}
+.pipeline-stage.running{border-color:var(--blue);background:#f0f7ff}
+.pipeline-stage.done{border-color:var(--green);background:#f0faf4}
+.pipeline-stage.pending{opacity:.45}
+.stage-label{font-weight:500;flex:1}
+.stage-desc{font-size:12px;color:var(--gray-400)}
+.stage-status{font-size:12px;font-weight:600}
+.stage-status.running{color:var(--blue)}
+.stage-status.done{color:var(--green)}
+.spinner{width:14px;height:14px;border:2px solid var(--blue-light);border-top-color:var(--blue);border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Progress */
+.prog-wrap{background:var(--gray-200);border-radius:20px;height:8px;overflow:hidden}
+.prog-fill{height:100%;border-radius:20px;background:var(--blue);transition:width .4s}
+.prog-fill.green{background:var(--green)}
+
+/* Metrics */
+.metrics-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.metric-card{background:#fff;border:1px solid var(--gray-200);border-radius:var(--radius);padding:14px;text-align:center}
+.metric-val{font-size:26px;font-weight:700;color:var(--blue)}
+.metric-lbl{font-size:11px;color:var(--gray-400);font-weight:500;margin-top:2px}
+
+/* Table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+thead th{background:var(--gray-50);border-bottom:2px solid var(--gray-200);padding:9px 11px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gray-600)}
+tbody td{padding:11px 11px;border-bottom:1px solid var(--gray-100);vertical-align:middle}
+tbody tr:hover{background:var(--gray-50)}
+tbody tr:last-child td{border-bottom:none}
+
+/* Badges */
+.conf-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px}
+.conf-badge.high{background:var(--green-bg);color:var(--green)}
+.conf-badge.mid{background:var(--orange-bg);color:var(--orange)}
+.conf-badge.low{background:var(--red-bg);color:var(--red)}
+.status-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px}
+.status-badge.auto{background:var(--green-bg);color:var(--green)}
+.status-badge.review{background:var(--orange-bg);color:var(--orange)}
+.status-badge.manual{background:var(--red-bg);color:var(--red)}
+.chip{display:inline-flex;align-items:center;background:var(--gray-100);border:1px solid var(--gray-200);color:var(--gray-700);font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px}
+
+/* Alert */
+.alert{padding:11px 14px;border-radius:var(--radius);font-size:13px;border-left:4px solid;margin-bottom:14px;display:flex;gap:9px;align-items:flex-start}
+.alert-info{background:#f0f7ff;border-color:var(--blue);color:#1a4f7a}
+.alert-warning{background:var(--orange-bg);border-color:var(--orange);color:#7c4a00}
+.alert-success{background:var(--green-bg);border-color:var(--green);color:#0f4a23}
+.alert-error{background:var(--red-bg);border-color:var(--red);color:#7f1d1d}
+
+/* Folder */
+.folder-tree{font-size:13px;font-family:monospace;line-height:2}
+.folder-tree .f-folder{color:var(--blue);font-weight:600}
+.folder-tree .f-file{color:var(--gray-700);padding-left:20px}
+.folder-tree .f-comm{color:var(--gray-500);padding-left:20px;font-style:italic}
+
+/* Comms */
+.comm-thread{display:flex;flex-direction:column;gap:10px;min-height:120px}
+.comm-msg{max-width:78%;padding:11px 14px;border-radius:12px;font-size:13px;line-height:1.5}
+.comm-msg.out{align-self:flex-end;background:var(--blue);color:#fff;border-bottom-right-radius:2px}
+.comm-msg.inn{align-self:flex-start;background:var(--gray-100);border-bottom-left-radius:2px}
+.comm-meta{font-size:11px;opacity:.7;margin-top:3px}
+
+/* Status dot */
+.case-status{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
+.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.dot-red{background:var(--red)}.dot-orange{background:var(--orange)}.dot-green{background:var(--green)}
+
+/* Footer bar */
+.footer-bar{background:#fff;border-top:1px solid var(--gray-200);padding:13px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;bottom:0;z-index:50;box-shadow:0 -2px 8px rgba(0,0,0,.05)}
+
+/* Section */
+.section-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
+.section-title{font-size:18px;font-weight:700}
+.section-sub{font-size:13px;color:var(--gray-400);margin-top:2px}
+
+/* Toast */
+#toast-container{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:8px;z-index:9999}
+.toast{background:var(--gray-900);color:#fff;padding:11px 16px;border-radius:var(--radius);font-size:13px;display:flex;align-items:center;gap:9px;box-shadow:0 4px 12px rgba(0,0,0,.2);animation:tIn .25s ease;min-width:240px}
+.toast.success{background:var(--green)}.toast.error{background:var(--red)}.toast.warning{background:var(--orange)}
+@keyframes tIn{from{transform:translateX(30px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+@media(max-width:700px){.form-grid,.form-grid-3{grid-template-columns:1fr}.metrics-bar{grid-template-columns:1fr 1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast-container"></div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────────
+const PROGRAMS = ['UAP','LIHEAP','USF','WAP','Other'];
+const DOC_TYPES = ['Application Form','Utility Bill','Bank Statement','Pay Stub','Lease','Photo ID','Other'];
+const PIPELINE_STAGES = [
+  {id:1,icon:'📁',label:'File Upload',desc:'Validating packet and page count'},
+  {id:2,icon:'🔍',label:'Scan Quality Check',desc:'Detecting rotation, blur, contrast'},
+  {id:3,icon:'🖼️',label:'Image Cleanup',desc:'Deskewing and enhancing scans'},
+  {id:4,icon:'📝',label:'OCR',desc:'Azure Document Intelligence Read'},
+  {id:5,icon:'✂️',label:'Document Segmentation',desc:'Detecting document boundaries'},
+  {id:6,icon:'🤖',label:'AI Classification',desc:'Custom classifier model'},
+  {id:7,icon:'🔑',label:'Keyword Rule Validation',desc:'Rule engine cross-check'},
+  {id:8,icon:'📊',label:'Confidence Scoring',desc:'Assigning confidence per document'},
+  {id:9,icon:'📞',label:'Contact Extraction',desc:'Phone, email, language'},
+];
+const MOCK_DOCS = [
+  {id:1,type:'Application Form',pages:'1–3',  confidence:98,checked:true},
+  {id:2,type:'Utility Bill',    pages:'4–5',  confidence:96,checked:true},
+  {id:3,type:'Bank Statement',  pages:'6–8',  confidence:87,checked:true},
+  {id:4,type:'Pay Stub',        pages:'9',    confidence:72,checked:false},
+  {id:5,type:'Lease',           pages:'10–12',confidence:95,checked:true},
+  {id:6,type:'Photo ID',        pages:'13',   confidence:91,checked:true},
+];
+const MOCK_CONTACT = {phone:'(201) 555-0182',email:'maria.rivera@email.com',language:'Spanish'};
+const STEPS_META = [
+  {n:1,label:'Case & Upload'},
+  {n:2,label:'AI Processing'},
+  {n:3,label:'Review & Confirm'},
+  {n:4,label:'Save to SharePoint'},
+  {n:5,label:'Communication'},
+  {n:6,label:'Case Status'},
+];
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
+function today(){return new Date().toISOString().slice(0,10)}
+function nowTime(){return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}
+function fmtSize(b){if(b<1048576)return(b/1024).toFixed(1)+' KB';return(b/1048576).toFixed(1)+' MB'}
+function confCls(s){return s>=95?'high':s>=80?'mid':'low'}
+function confLbl(s){return s>=95?'Auto Accept':s>=80?'Optional Review':'Manual Review'}
+function stCls(s){return s>=95?'auto':s>=80?'review':'manual'}
+function stLbl(s){return s>=95?'Auto':s>=80?'Review':'Manual'}
+
+function showToast(msg,type='',dur=3200){
+  const c=document.getElementById('toast-container');
+  const icons={success:'✅',error:'❌',warning:'⚠️','':'💬'};
+  const t=document.createElement('div');
+  t.className='toast '+type;
+  t.innerHTML=`<span>${icons[type]||'💬'}</span><span>${msg}</span>`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),dur);
+}
+
+// ── App State ──────────────────────────────────────────────────────────────────
+let STATE = {
+  clientName:'Maria Rivera',uapNumber:'847221',program:'UAP',
+  intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[]
+};
+let STEP = 1;
+
+function go(s){STEP=s;render();window.scrollTo({top:0,behavior:'smooth'})}
+
+// ── Render Root ────────────────────────────────────────────────────────────────
+function render(){
+  const app=document.getElementById('app');
+  app.innerHTML='';
+  app.appendChild(mkHeader());
+  app.appendChild(mkStepper());
+  const main=document.createElement('main');
+  main.className='main';
+  const pages={1:step1,2:step2,3:step3,4:step4,5:step5,6:step6};
+  main.appendChild(pages[STEP]());
+  app.appendChild(main);
+}
+
+// ── Header ─────────────────────────────────────────────────────────────────────
+function mkHeader(){
+  const h=document.createElement('header');
+  h.className='header';
+  h.innerHTML=`
+    <div class="header-brand">
+      <span style="font-size:22px">📋</span>
+      <span>PACO Agency</span>
+      <span class="badge">SMART PACKET PROCESSOR</span>
+    </div>
+    <div class="header-user">
+      <span>J. Martinez</span>
+      <div class="avatar">JM</div>
+    </div>`;
+  return h;
+}
+
+// ── Stepper ────────────────────────────────────────────────────────────────────
+function mkStepper(){
+  const w=document.createElement('div');
+  w.className='stepper';
+  STEPS_META.forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='step-item'+(s.n===STEP?' active':s.n<STEP?' done':'');
+    d.innerHTML=`<div class="step-num">${s.n<STEP?'✓':s.n}</div><span>${s.label}</span>`;
+    w.appendChild(d);
+    if(i<STEPS_META.length-1){const a=document.createElement('span');a.className='step-arrow';a.textContent='›';w.appendChild(a)}
+  });
+  return w;
+}
+
+// ── STEP 1: Upload ─────────────────────────────────────────────────────────────
+function step1(){
+  const wrap=document.createElement('div');
+  wrap.innerHTML=`
+    <div class="section-header">
+      <div><div class="section-title">📁 Case Information & Upload</div>
+      <div class="section-sub">Enter applicant details and upload the scanned packet</div></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">👤 Required Information</span></div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="form-group"><label>Client Name *</label><input id="f-name" type="text" placeholder="Maria Rivera" value="${STATE.clientName}"/></div>
+          <div class="form-group"><label>UAP Number *</label><input id="f-uap" type="text" placeholder="847221" value="${STATE.uapNumber}"/></div>
+          <div class="form-group"><label>Program *</label>
+            <select id="f-prog">${PROGRAMS.map(p=>`<option value="${p}"${STATE.program===p?' selected':''}>${p}</option>`).join('')}</select>
+          </div>
+          <div class="form-group"><label>Processed By</label><input type="text" value="J. Martinez" readonly/></div>
+          <div class="form-group"><label>Intake Date</label><input id="f-date" type="date" value="${STATE.intakeDate}"/></div>
+          <div class="form-group"><label>Notes (Optional)</label><input id="f-notes" type="text" placeholder="Any context..." value="${STATE.notes}"/></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">📄 Packet Upload</span><span class="chip">PDF only · Max 200 MB</span></div>
+      <div class="card-body">
+        <div class="upload-zone" id="uzone">
+          <div class="upload-icon">📤</div>
+          <div class="upload-text">Drag &amp; drop PDF here</div>
+          <div class="upload-sub">or <span id="browse-link" style="color:var(--blue);cursor:pointer;text-decoration:underline">browse files</span></div>
+          <input type="file" id="file-inp" accept=".pdf" style="display:none"/>
+        </div>
+        <div class="file-info" id="finfo" style="display:none">
+          <span style="font-size:28px">📄</span>
+          <div style="flex:1"><div id="fname" style="font-weight:600"></div><div id="fmeta" style="color:var(--gray-400);font-size:12px"></div></div>
+          <button class="btn btn-secondary btn-sm" id="fremove">✕ Remove</button>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bar">
+      <span style="color:var(--gray-400);font-size:12px">* Required fields</span>
+      <button class="btn btn-primary" id="s1-next" disabled>Continue to AI Processing →</button>
+    </div>`;
+
+  const nextBtn=wrap.querySelector('#s1-next');
+  const zone=wrap.querySelector('#uzone');
+  const finp=wrap.querySelector('#file-inp');
+  const finfo=wrap.querySelector('#finfo');
+
+  function checkReady(){
+    const n=wrap.querySelector('#f-name').value.trim();
+    const u=wrap.querySelector('#f-uap').value.trim();
+    nextBtn.disabled=!(n&&u&&STATE.file);
+  }
+  wrap.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',checkReady));
+
+  function loadFile(file){
+    if(!file||file.type!=='application/pdf'){showToast('Please upload a PDF file only.','error');return}
+    STATE.file=file;
+    wrap.querySelector('#fname').textContent=file.name;
+    wrap.querySelector('#fmeta').textContent=fmtSize(file.size)+' · ~13 pages';
+    finfo.style.display='flex';zone.style.display='none';
+    showToast('File loaded: '+file.name,'success');checkReady();
+  }
+
+  wrap.querySelector('#browse-link').addEventListener('click',()=>finp.click());
+  zone.addEventListener('click',()=>finp.click());
+  finp.addEventListener('change',e=>loadFile(e.target.files[0]));
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over')});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');loadFile(e.dataTransfer.files[0])});
+  wrap.querySelector('#fremove').addEventListener('click',()=>{STATE.file=null;finfo.style.display='none';zone.style.display='';checkReady()});
+
+  nextBtn.addEventListener('click',()=>{
+    STATE.clientName=wrap.querySelector('#f-name').value.trim();
+    STATE.uapNumber=wrap.querySelector('#f-uap').value.trim();
+    STATE.program=wrap.querySelector('#f-prog').value;
+    STATE.intakeDate=wrap.querySelector('#f-date').value;
+    STATE.notes=wrap.querySelector('#f-notes').value.trim();
+    // Demo: simulate file if none uploaded
+    if(!STATE.file){
+      STATE.file={name:'UAP_847221_MariaRivera_Packet.pdf',size:2457600};
+      showToast('Demo mode: packet loaded automatically','');
+    }
+    go(2);
+  });
+
+  // Demo mode: enable button if name+uap filled (no file required)
+  function checkReady(){
+    const n=wrap.querySelector('#f-name').value.trim();
+    const u=wrap.querySelector('#f-uap').value.trim();
+    nextBtn.disabled=!(n&&u);
+  }
+  wrap.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',checkReady));
+  checkReady();
+  return wrap;
+}
+
+// ── STEP 2: AI Pipeline ────────────────────────────────────────────────────────
+function step2(){
+  const wrap=document.createElement('div');
+  wrap.innerHTML=`
+    <div class="section-header">
+      <div><div class="section-title">🤖 AI Processing Pipeline</div>
+      <div class="section-sub">Processing packet for ${STATE.clientName} — UAP #${STATE.uapNumber}</div></div>
+      <span class="chip" id="overall-status">Processing...</span>
+    </div>
+    <div class="card">
+      <div class="card-header"><span class="card-title">📄 ${STATE.file?STATE.file.name:'Application_Packet.pdf'}</span></div>
+      <div class="card-body">
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+            <span style="font-size:13px;color:var(--gray-600)" id="prog-label">Stage 0 of 9</span>
+            <span style="font-size:13px;font-weight:600" id="prog-pct">0%</span>
+          </div>
+          <div class="prog-wrap"><div class="prog-fill" id="main-prog" style="width:0%"></div></div>
+        </div>
+        <div id="pipeline-list"></div>
+      </div>
+    </div>
+    <div class="card" id="extract-card" style="display:none">
+      <div class="card-header"><span class="card-title">📞 Extracted Contact Information</span></div>
+      <div class="card-body">
+        <div class="form-grid-3">
+          <div class="form-group"><label>Mobile Phone</label><input type="text" value="${MOCK_CONTACT.phone}" readonly/></div>
+          <div class="form-group"><label>Email Address</label><input type="text" value="${MOCK_CONTACT.email}" readonly/></div>
+          <div class="form-group"><label>Preferred Language</label><input type="text" value="${MOCK_CONTACT.language}" readonly/></div>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bar">
+      <div></div>
+      <button class="btn btn-primary" id="s2-next" disabled>Review Results →</button>
+    </div>`;
+
+  const list=wrap.querySelector('#pipeline-list');
+  const progEl=wrap.querySelector('#main-prog');
+  const progLbl=wrap.querySelector('#prog-label');
+  const progPct=wrap.querySelector('#prog-pct');
+  const overallEl=wrap.querySelector('#overall-status');
+  const nextBtn=wrap.querySelector('#s2-next');
+  const extractCard=wrap.querySelector('#extract-card');
+
+  // Build all stages as pending
+  const stageRows={};
+  PIPELINE_STAGES.forEach(s=>{
+    const row=document.createElement('div');
+    row.className='pipeline-stage pending';
+    row.innerHTML=`<span style="font-size:18px;width:24px;text-align:center">${s.icon}</span>
+      <div style="flex:1"><div class="stage-label">${s.label}</div><div class="stage-desc">${s.desc}</div></div>
+      <span class="stage-status" id="ss${s.id}">Pending</span>`;
+    list.appendChild(row);
+    stageRows[s.id]=row;
+  });
+
+  const delays=[400,600,500,900,700,800,600,500,700];
+  (async()=>{
+    for(let i=0;i<PIPELINE_STAGES.length;i++){
+      const s=PIPELINE_STAGES[i];
+      const row=stageRows[s.id];
+      const ss=row.querySelector('#ss'+s.id);
+      row.className='pipeline-stage running';
+      ss.className='stage-status running';
+      ss.innerHTML='<span class="spinner"></span> Running';
+      await sleep(delays[i]);
+      row.className='pipeline-stage done';
+      ss.className='stage-status done';
+      ss.textContent='✓ Done';
+      const pct=Math.round(((i+1)/9)*100);
+      progEl.style.width=pct+'%';
+      progLbl.textContent=`Stage ${i+1} of 9`;
+      progPct.textContent=pct+'%';
+      if(pct===100)progEl.classList.add('green');
+    }
+    overallEl.textContent='✅ Complete';
+    overallEl.style.cssText='background:var(--green-bg);color:var(--green);padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600';
+    extractCard.style.display='';
+    nextBtn.disabled=false;
+    showToast('AI processing complete — 6 documents detected','success');
+  })();
+
+  nextBtn.addEventListener('click',()=>go(3));
+  return wrap;
+}
+
+// ── STEP 3: Review ────────────────────────────────────────────────────────────
+// Mock page image data per document (base64 placeholder canvases rendered via JS)
+const DOC_MOCK_PAGES = {
+  1: { pages:3, color:'#e8f4e8', label:'Application Form',   lines:[[60,80,340,80],[60,110,280,110],[60,140,320,140],[60,180,200,180],[60,210,340,210],[60,240,260,240],[60,280,340,280],[60,310,180,310],[60,350,340,350],[60,380,300,380],[60,420,340,420]] },
+  2: { pages:2, color:'#e8eef8', label:'Utility Bill',       lines:[[60,80,340,80],[60,110,200,110],[60,150,340,150],[60,180,280,180],[60,220,340,220],[60,250,160,250],[60,290,340,290],[60,320,240,320],[60,360,340,360],[60,390,200,390]] },
+  3: { pages:3, color:'#fef9e8', label:'Bank Statement',     lines:[[60,80,340,80],[60,110,300,110],[60,140,340,140],[60,180,260,180],[60,220,340,220],[60,260,200,260],[60,300,340,300],[60,340,280,340],[60,380,340,380],[60,420,220,420]] },
+  4: { pages:1, color:'#fdecea', label:'Pay Stub',           lines:[[60,80,340,80],[60,110,220,110],[60,150,340,150],[60,190,300,190],[60,230,340,230],[60,270,180,270],[60,310,340,310],[60,350,260,350]] },
+  5: { pages:3, color:'#f3eef8', label:'Lease',              lines:[[60,80,340,80],[60,110,340,110],[60,140,340,140],[60,170,340,170],[60,210,340,210],[60,250,340,250],[60,290,280,290],[60,330,340,330],[60,370,300,370],[60,410,340,410],[60,450,200,450]] },
+  6: { pages:1, color:'#fff3e8', label:'Photo ID',           lines:[[60,80,200,80],[60,110,180,110],[120,150,280,200],[60,240,340,240],[60,270,220,270],[60,300,280,300]] },
+};
+
+function drawDocCanvas(canvas, docId, pageNum) {
+  const ctx = canvas.getContext('2d');
+  const d = DOC_MOCK_PAGES[docId] || DOC_MOCK_PAGES[1];
+  const W = canvas.width, H = canvas.height;
+  // Page background
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  // Subtle page tint
+  ctx.fillStyle = d.color;
+  ctx.globalAlpha = 0.3;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  // Border
+  ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(2, 2, W-4, H-4);
+  // Header bar
+  ctx.fillStyle = d.color;
+  ctx.fillRect(20, 20, W-40, 40);
+  ctx.fillStyle = '#333';
+  ctx.font = 'bold 13px Segoe UI, sans-serif';
+  ctx.fillText(d.label, 30, 47);
+  ctx.font = '11px Segoe UI, sans-serif';
+  ctx.fillStyle = '#888';
+  ctx.fillText('Page ' + pageNum + ' of ' + d.pages, W - 90, 47);
+  // Simulated text lines
+  ctx.strokeStyle = '#bbb';
+  ctx.lineWidth = 8;
+  ctx.lineCap = 'round';
+  d.lines.forEach((ln, i) => {
+    const variance = (i % 3 === 0) ? 0.85 : 1;
+    ctx.strokeStyle = i % 5 === 0 ? '#ccc' : '#ddd';
+    ctx.lineWidth = i % 4 === 0 ? 10 : 7;
+    ctx.beginPath();
+    ctx.moveTo(ln[0], ln[1] + (pageNum-1)*15);
+    ctx.lineTo(ln[2] * variance, ln[3] + (pageNum-1)*15);
+    ctx.stroke();
+  });
+  // Simulated logo box top-right
+  if (pageNum === 1) {
+    ctx.fillStyle = d.color;
+    ctx.fillRect(W-80, 20, 60, 36);
+    ctx.fillStyle = '#aaa';
+    ctx.font = 'bold 10px Segoe UI';
+    ctx.fillText('LOGO', W-68, 43);
+  }
+  // Page number bottom
+  ctx.fillStyle = '#aaa';
+  ctx.font = '10px Segoe UI';
+  ctx.textAlign = 'center';
+  ctx.fillText('— ' + pageNum + ' —', W/2, H - 12);
+  ctx.textAlign = 'left';
+}
+
+// ── Preview Modal ─────────────────────────────────────────────────────────────
+function openPreviewModal(doc, allDocs, onTypeChange) {
+  // Remove existing modal
+  const existing = document.getElementById('preview-modal');
+  if (existing) existing.remove();
+
+  let currentPage = 1;
+  const totalPages = DOC_MOCK_PAGES[doc.id]?.pages || 1;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'preview-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  function buildModal() {
+    overlay.innerHTML = `
+      <div style="background:#fff;border-radius:10px;width:900px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4)">
+        <!-- Modal Header -->
+        <div style="padding:14px 20px;border-bottom:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:20px">📄</span>
+            <div>
+              <div style="font-weight:700;font-size:15px">${doc.type}</div>
+              <div style="font-size:12px;color:var(--gray-400)">Pages ${doc.pages} · Confidence ${doc.confidence}% · Document #${doc.id}</div>
+            </div>
+          </div>
+          <button id="close-modal" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--gray-400);padding:4px 8px;border-radius:4px;line-height:1">&times;</button>
+        </div>
+
+        <!-- Modal Body -->
+        <div style="display:flex;flex:1;overflow:hidden">
+
+          <!-- Left: Page viewer -->
+          <div style="flex:1;display:flex;flex-direction:column;border-right:1px solid var(--gray-200)">
+            <!-- Page nav -->
+            <div style="padding:10px 16px;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between;background:#fafafa">
+              <button id="prev-pg" class="btn btn-secondary btn-sm" ${currentPage<=1?'disabled':''}>‹ Prev</button>
+              <span style="font-size:13px;font-weight:600;color:var(--gray-700)">Page ${currentPage} of ${totalPages}</span>
+              <button id="next-pg" class="btn btn-secondary btn-sm" ${currentPage>=totalPages?'disabled':''}>Next ›</button>
+            </div>
+            <!-- Canvas -->
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:20px;background:#f0f0f0;overflow:auto">
+              <canvas id="doc-canvas" width="400" height="520" style="background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.15);border-radius:3px;max-width:100%"></canvas>
+            </div>
+            <!-- Page thumbnails -->
+            <div style="padding:10px 16px;border-top:1px solid var(--gray-100);display:flex;gap:8px;overflow-x:auto;background:#fafafa">
+              ${Array.from({length:totalPages},(_,i)=>`
+                <canvas class="thumb-canvas" data-page="${i+1}" width="60" height="80"
+                  style="border-radius:3px;cursor:pointer;border:2px solid ${i+1===currentPage?'var(--blue)':'var(--gray-200)'};flex-shrink:0"></canvas>
+              `).join('')}
+            </div>
+          </div>
+
+          <!-- Right: Classification panel -->
+          <div style="width:280px;display:flex;flex-direction:column;overflow-y:auto">
+            <div style="padding:16px;border-bottom:1px solid var(--gray-100)">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin-bottom:10px">AI Classification</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span class="conf-badge ${confCls(doc.confidence)}" style="font-size:13px;padding:4px 12px">${doc.confidence}%</span>
+                <span style="font-size:12px;color:var(--gray-600)">${confLbl(doc.confidence)}</span>
+              </div>
+              <div class="prog-wrap" style="margin-bottom:4px">
+                <div class="prog-fill" style="width:${doc.confidence}%;background:${doc.confidence>=95?'var(--green)':doc.confidence>=80?'var(--orange)':'var(--red)'}"></div>
+              </div>
+              <div style="font-size:11px;color:var(--gray-400)">Confidence threshold: ${doc.confidence>=95?'Auto Accept ≥95%':doc.confidence>=80?'Optional Review 80–94%':'Manual Review <80%'}</div>
+            </div>
+
+            <div style="padding:16px;border-bottom:1px solid var(--gray-100)">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin-bottom:10px">Override Document Type</div>
+              <select id="modal-type-select" style="width:100%;font-size:13px;padding:8px 10px;border-radius:6px;border:1px solid var(--gray-300)">
+                ${DOC_TYPES.map(t=>`<option value="${t}"${t===doc.type?' selected':''}>${t}</option>`).join('')}
+              </select>
+              <button id="apply-type" class="btn btn-primary" style="width:100%;margin-top:10px">✓ Apply Type Change</button>
+            </div>
+
+            <div style="padding:16px;border-bottom:1px solid var(--gray-100)">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin-bottom:10px">Keyword Matches</div>
+              ${getKeywords(doc.type).map(k=>`<div style="display:inline-flex;margin:2px"><span class="chip">${k}</span></div>`).join('') || '<span style="color:var(--gray-400);font-size:12px">No keywords matched</span>'}
+            </div>
+
+            <div style="padding:16px;border-bottom:1px solid var(--gray-100)">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin-bottom:10px">Navigate Documents</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${allDocs.map(d=>`
+                  <div class="doc-nav-btn" data-docid="${d.id}" style="padding:8px 10px;border-radius:6px;cursor:pointer;border:1px solid ${d.id===doc.id?'var(--blue)':'var(--gray-200)'};background:${d.id===doc.id?'var(--blue-light)':'#fff'};font-size:12px;font-weight:${d.id===doc.id?'700':'400'};color:${d.id===doc.id?'var(--blue-dark)':'var(--gray-700)'}">
+                    <span>${d.id===doc.id?'▶ ':''}</span>${d.type} <span style="float:right;color:var(--gray-400)">${d.confidence}%</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+
+            <div style="padding:16px">
+              <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-600);margin-bottom:10px">Include in Save</div>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;text-transform:none;letter-spacing:0;font-weight:400">
+                <input type="checkbox" id="modal-include" ${doc.checked?'checked':''} style="width:16px;height:16px;accent-color:var(--green)"/>
+                Include this document
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div style="padding:12px 20px;border-top:1px solid var(--gray-200);display:flex;align-items:center;justify-content:space-between;background:var(--gray-50)">
+          <div style="font-size:12px;color:var(--gray-400)">Document ${doc.id} of ${allDocs.length} · ${totalPages} page${totalPages>1?'s':''}</div>
+          <div style="display:flex;gap:8px">
+            <button id="prev-doc" class="btn btn-secondary btn-sm" ${doc.id<=1?'disabled':''}>‹ Prev Doc</button>
+            <button id="next-doc" class="btn btn-secondary btn-sm" ${doc.id>=allDocs.length?'disabled':''}>Next Doc ›</button>
+            <button id="close-modal-btn" class="btn btn-primary btn-sm">Done ✓</button>
+          </div>
+        </div>
+      </div>`;
+
+    // Draw main canvas
+    setTimeout(()=>{
+      const canvas = overlay.querySelector('#doc-canvas');
+      if(canvas) drawDocCanvas(canvas, doc.id, currentPage);
+      // Draw thumbnails
+      overlay.querySelectorAll('.thumb-canvas').forEach(tc=>{
+        drawDocCanvas(tc, doc.id, parseInt(tc.dataset.page));
+      });
+    }, 30);
+
+    // Events
+    overlay.querySelector('#close-modal').addEventListener('click',()=>overlay.remove());
+    overlay.querySelector('#close-modal-btn').addEventListener('click',()=>overlay.remove());
+    overlay.querySelector('#prev-pg').addEventListener('click',()=>{ if(currentPage>1){currentPage--;buildModal()} });
+    overlay.querySelector('#next-pg').addEventListener('click',()=>{ if(currentPage<totalPages){currentPage++;buildModal()} });
+
+    overlay.querySelectorAll('.thumb-canvas').forEach(tc=>{
+      tc.addEventListener('click',()=>{ currentPage=parseInt(tc.dataset.page); buildModal(); });
+    });
+
+    overlay.querySelector('#apply-type').addEventListener('click',()=>{
+      const newType = overlay.querySelector('#modal-type-select').value;
+      onTypeChange(doc.id, newType, overlay.querySelector('#modal-include').checked);
+      doc.type = newType;
+      showToast('Document type updated to: '+newType,'success');
+      buildModal();
+    });
+
+    overlay.querySelector('#modal-include').addEventListener('change', e=>{
+      onTypeChange(doc.id, doc.type, e.target.checked);
+      doc.checked = e.target.checked;
+    });
+
+    overlay.querySelector('#prev-doc').addEventListener('click',()=>{
+      const prevDoc = allDocs.find(d=>d.id===doc.id-1);
+      if(prevDoc){overlay.remove();openPreviewModal(prevDoc,allDocs,onTypeChange)}
+    });
+    overlay.querySelector('#next-doc').addEventListener('click',()=>{
+      const nextDoc = allDocs.find(d=>d.id===doc.id+1);
+      if(nextDoc){overlay.remove();openPreviewModal(nextDoc,allDocs,onTypeChange)}
+    });
+
+    overlay.querySelectorAll('.doc-nav-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const targetDoc = allDocs.find(d=>d.id==btn.dataset.docid);
+        if(targetDoc){overlay.remove();openPreviewModal(targetDoc,allDocs,onTypeChange)}
+      });
+    });
+
+    // Close on backdrop click
+    overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove()});
+  }
+
+  buildModal();
+  document.body.appendChild(overlay);
+}
+
+function getKeywords(type) {
+  const map = {
+    'Application Form':['LIHEAP','Applicant','Household','Signature'],
+    'Utility Bill':['PSE&G','Account No.','Kilowatt','Due Date','Usage'],
+    'Bank Statement':['Statement Period','Balance','Deposits','Withdrawals'],
+    'Pay Stub':['Pay Period','Net Pay','Gross Pay','YTD'],
+    'Lease':['Lease Agreement','Landlord','Tenant','Monthly Rent'],
+    'Photo ID':['Driver License','Date of Birth','SSN','ID Number'],
+    'Other':[],
+  };
+  return map[type]||[];
+}
+
+function step3(){
+  let docs = MOCK_DOCS.map(d=>({...d}));
+  const wrap = document.createElement('div');
+
+  function onTypeChange(id, newType, checked) {
+    const d = docs.find(x=>x.id===id);
+    if(d){ d.type=newType; d.checked=checked; draw(); }
+  }
+
+  function avgConf(){const ch=docs.filter(d=>d.checked);return ch.length?Math.round(ch.reduce((s,d)=>s+d.confidence,0)/ch.length):0}
+
+  function draw(){
+    const checked=docs.filter(d=>d.checked);
+    const missing=docs.filter(d=>!d.checked);
+    wrap.innerHTML=`
+      <div class="section-header">
+        <div><div class="section-title">🔍 Review &amp; Confirm</div>
+        <div class="section-sub">${STATE.clientName} · UAP #${STATE.uapNumber} · ${STATE.program}</div></div>
+        <div class="alert alert-info" style="margin:0;padding:8px 14px;font-size:12px">💡 Click <strong>Preview</strong> on any row to view the document and confirm its type</div>
+      </div>
+      <div class="metrics-bar">
+        <div class="metric-card"><div class="metric-val">13</div><div class="metric-lbl">Total Pages</div></div>
+        <div class="metric-card"><div class="metric-val">${docs.length}</div><div class="metric-lbl">Docs Detected</div></div>
+        <div class="metric-card"><div class="metric-val">${avgConf()}%</div><div class="metric-lbl">Avg Confidence</div></div>
+        <div class="metric-card"><div class="metric-val">12s</div><div class="metric-lbl">Process Time</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📋 Classification Results</span><span class="chip">${checked.length} of ${docs.length} selected</span></div>
+        <div class="card-body">
+          <div class="tbl-wrap"><table>
+            <thead><tr><th>✓</th><th>#</th><th>Document Type</th><th>Pages</th><th>Confidence</th><th>Status</th><th>Override</th><th>Preview</th></tr></thead>
+            <tbody>
+              ${docs.map(d=>`<tr>
+                <td><input type="checkbox" class="doc-ck" data-id="${d.id}" ${d.checked?'checked':''} style="width:16px;height:16px;accent-color:var(--green);cursor:pointer"/></td>
+                <td style="color:var(--gray-400);font-weight:600">${d.id}</td>
+                <td style="font-weight:500">${d.type}</td>
+                <td><span class="chip">${d.pages}</span></td>
+                <td><div style="display:flex;align-items:center;gap:8px">
+                  <div class="prog-wrap" style="width:70px"><div class="prog-fill" style="width:${d.confidence}%;background:${d.confidence>=95?'var(--green)':d.confidence>=80?'var(--orange)':'var(--red)'}"></div></div>
+                  <span class="conf-badge ${confCls(d.confidence)}">${d.confidence}%</span>
+                </div></td>
+                <td><span class="status-badge ${stCls(d.confidence)}">${stLbl(d.confidence)}</span></td>
+                <td><select class="doc-ov" data-id="${d.id}" style="font-size:12px;padding:4px 8px;border-radius:4px">
+                  ${DOC_TYPES.map(t=>`<option value="${t}"${t===d.type?' selected':''}>${t}</option>`).join('')}
+                </select></td>
+                <td><button class="btn btn-secondary btn-sm preview-btn" data-id="${d.id}" style="gap:4px">🔍 Preview</button></td>
+              </tr>`).join('')}
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Unchecked — will not be saved:</strong> ${missing.map(d=>d.type).join(', ')}. You can request them in Step 5.</div></div>`
+        :`<div class="alert alert-success">✅ All documents confirmed and ready to save.</div>`}
+      <div class="card">
+        <div class="card-header"><span class="card-title">📂 Folder Preview</span></div>
+        <div class="card-body"><div class="folder-tree">
+          <div class="f-folder">📁 PACO Document Intake / UAP / ${STATE.uapNumber}_${STATE.clientName.replace(/ /g,'_')}/</div>
+          <div class="f-file">📄 ORIGINAL_PACKET.pdf</div>
+          ${checked.map(d=>`<div class="f-file">📄 ${d.type.replace(/ /g,'')}.pdf</div>`).join('')}
+          <div class="f-comm">📁 Communications/</div>
+        </div></div>
+      </div>
+      <div class="footer-bar">
+        <button class="btn btn-secondary" id="s3-back">← Back</button>
+        <button class="btn btn-primary" id="s3-next">Save to SharePoint →</button>
+      </div>`;
+
+    wrap.querySelector('#s3-back').addEventListener('click',()=>go(2));
+    wrap.querySelector('#s3-next').addEventListener('click',()=>{STATE.confirmedDocs=docs.filter(d=>d.checked);go(4)});
+    wrap.querySelectorAll('.doc-ck').forEach(cb=>cb.addEventListener('change',e=>{
+      const d=docs.find(x=>x.id==e.target.dataset.id);
+      if(d){d.checked=e.target.checked;draw()}
+    }));
+    wrap.querySelectorAll('.doc-ov').forEach(sel=>sel.addEventListener('change',e=>{
+      const d=docs.find(x=>x.id==e.target.dataset.id);
+      if(d){d.type=e.target.value;draw()}
+    }));
+    wrap.querySelectorAll('.preview-btn').forEach(btn=>btn.addEventListener('click',()=>{
+      const d=docs.find(x=>x.id==btn.dataset.id);
+      if(d) openPreviewModal(d, docs, onTypeChange);
+    }));
+  }
+  draw();
+  return wrap;
+}
+
+// ── STEP 4: Save ──────────────────────────────────────────────────────────────
+function step4(){
+  const wrap=document.createElement('div');
+  let phase=null;
+
+  function draw(){
+    const docs=STATE.confirmedDocs||[];
+    wrap.innerHTML=`
+      <div class="section-header">
+        <div><div class="section-title">💾 Save to SharePoint</div>
+        <div class="section-sub">${STATE.clientName} · UAP #${STATE.uapNumber}</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📂 Documents to Save</span><span class="chip">${docs.length} files</span></div>
+        <div class="card-body">
+          ${docs.map((d,i)=>{
+            const isDone=phase==='done'||( typeof phase==='number'&&i<phase);
+            const isRun=typeof phase==='number'&&i===phase;
+            return`<div class="pipeline-stage ${isDone?'done':isRun?'running':'pending'}" style="margin-bottom:7px">
+              <span style="font-size:18px">📄</span>
+              <div style="flex:1"><div class="stage-label">${d.type.replace(/ /g,'')}.pdf</div>
+              <div class="stage-desc">Pages ${d.pages} · Confidence ${d.confidence}%</div></div>
+              <span class="stage-status ${isDone?'done':isRun?'running':''}">
+                ${isDone?'✓ Saved':isRun?'<span class="spinner"></span> Saving...':'Queued'}
+              </span></div>`;
+          }).join('')}
+        </div>
+      </div>
+      <div class="card" style="${phase!=='done'?'opacity:.5':''}">
+        <div class="card-header"><span class="card-title">🏷️ Metadata Applied per File</span></div>
+        <div class="card-body">
+          <div class="form-grid">
+            ${[['Client Name',STATE.clientName],['UAP Number',STATE.uapNumber],['Program',STATE.program],
+               ['Processed By','J. Martinez'],['Intake Date',STATE.intakeDate||today()],['Processing Date',today()],
+               ['Mobile Phone',MOCK_CONTACT.phone],['Email',MOCK_CONTACT.email],['Preferred Language',MOCK_CONTACT.language]
+              ].map(([l,v])=>`<div class="form-group"><label>${l}</label><input type="text" value="${v}" readonly/></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <button class="btn btn-secondary" id="s4-back" ${phase!==null?'disabled':''}>← Back</button>
+        <button class="btn btn-${phase==='done'?'success':'primary'}" id="s4-btn">
+          ${phase===null?'💾 Save All to SharePoint':phase==='done'?'✅ Saved — Continue →':'⏳ Saving...'}
+        </button>
+      </div>`;
+
+    wrap.querySelector('#s4-back').addEventListener('click',()=>go(3));
+    wrap.querySelector('#s4-btn').addEventListener('click',async()=>{
+      if(phase==='done'){go(5);return}
+      if(phase!==null)return;
+      const docs=STATE.confirmedDocs||[];
+      for(let i=0;i<docs.length;i++){phase=i;draw();await sleep(550)}
+      phase='done';draw();
+      showToast('All documents saved to SharePoint!','success');
+    });
+  }
+  draw();
+  return wrap;
+}
+
+// ── STEP 5: Communication ─────────────────────────────────────────────────────
+function step5(){
+  const wrap=document.createElement('div');
+  const missing=MOCK_DOCS.filter(d=>!d.checked||d.confidence<80).map(d=>d.type);
+  let msgs=[];
+
+  function draw(){
+    wrap.innerHTML=`
+      <div class="section-header">
+        <div><div class="section-title">💬 Communication Module</div>
+        <div class="section-sub">Request missing documents from ${STATE.clientName}</div></div>
+        <button class="btn btn-secondary btn-sm" id="skip-btn">Skip →</button>
+      </div>
+      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Missing / low-confidence:</strong> ${missing.join(', ')}</div></div>`
+        :`<div class="alert alert-success">✅ All documents present. Communication is optional.</div>`}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+        <div class="card">
+          <div class="card-header"><span class="card-title">✏️ Compose Request</span></div>
+          <div class="card-body">
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Message</label>
+              <textarea id="msg-txt" rows="4" placeholder="Please submit your most recent pay stub.">${missing.length?'Please submit your most recent '+missing[0].toLowerCase()+'.':''}</textarea>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Send Via</label>
+              <div style="display:flex;gap:16px;margin-top:4px">
+                <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;cursor:pointer">
+                  <input type="checkbox" id="via-sms" checked style="width:15px;height:15px"/> SMS (${MOCK_CONTACT.phone})
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;cursor:pointer">
+                  <input type="checkbox" id="via-email" checked style="width:15px;height:15px"/> Email
+                </label>
+              </div>
+            </div>
+            <div class="form-group" style="margin-bottom:14px">
+              <label>Language</label>
+              <input type="text" value="Auto-detected (${MOCK_CONTACT.language})" readonly/>
+            </div>
+            <button class="btn btn-primary" id="send-btn" style="width:100%">📤 Send Message</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">📨 Message Thread</span>
+            <span class="chip">${msgs.length} messages</span>
+          </div>
+          <div class="card-body">
+            <div class="comm-thread" id="thread">
+              ${!msgs.length?`<div style="text-align:center;color:var(--gray-400);padding:30px 0;font-size:13px">No messages yet</div>`:''}
+              ${msgs.map(m=>`<div class="comm-msg ${m.dir==='out'?'out':'inn'}">
+                <div>${m.text}</div><div class="comm-meta">${m.time} · ${m.via}</div>
+              </div>`).join('')}
+            </div>
+          </div>
+          ${msgs.some(m=>m.dir==='out')?`
+          <div style="padding:12px 18px;border-top:1px solid var(--gray-200)">
+            <button class="btn btn-secondary btn-sm" id="sim-reply" style="width:100%">📱 Simulate Client Reply (Demo)</button>
+          </div>`:''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">📋 Message Template Preview</span></div>
+        <div class="card-body">
+          <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:6px;padding:14px;font-size:13px;line-height:1.9;white-space:pre-wrap;font-family:monospace">Hello ${STATE.clientName},
+
+PACO Agency is reviewing your application and requires additional information.
+
+Please submit:
+[your request message]
+
+You may reply to this message with a photo or PDF attachment.
+
+Thank you.
+— PACO Agency</div>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <button class="btn btn-secondary" id="s5-back">← Back</button>
+        <button class="btn btn-primary" id="s5-next">Continue to Case Status →</button>
+      </div>`;
+
+    wrap.querySelector('#skip-btn').addEventListener('click',()=>{STATE.commsLog=msgs;go(6)});
+    wrap.querySelector('#s5-back').addEventListener('click',()=>go(4));
+    wrap.querySelector('#s5-next').addEventListener('click',()=>{STATE.commsLog=msgs;go(6)});
+    wrap.querySelector('#send-btn').addEventListener('click',()=>{
+      const txt=wrap.querySelector('#msg-txt').value.trim();
+      if(!txt){showToast('Please enter a message.','warning');return}
+      const sms=wrap.querySelector('#via-sms').checked;
+      const email=wrap.querySelector('#via-email').checked;
+      if(!sms&&!email){showToast('Select at least one channel.','warning');return}
+      msgs.push({dir:'out',text:txt,time:nowTime(),via:[sms?'SMS':'',email?'Email':''].filter(Boolean).join(' + ')});
+      showToast('Message sent!','success');draw();
+    });
+    const simBtn=wrap.querySelector('#sim-reply');
+    if(simBtn)simBtn.addEventListener('click',()=>{
+      msgs.push({dir:'in',text:"Hi, I've attached my pay stub. Please let me know if you need anything else.",time:nowTime(),via:'SMS'});
+      showToast('📥 Client reply received — document added to folder','success');draw();
+    });
+  }
+  draw();
+  return wrap;
+}
+
+// ── STEP 6: Status ────────────────────────────────────────────────────────────
+function step6(){
+  const wrap=document.createElement('div');
+  const hasComms=(STATE.commsLog||[]).length>0;
+  const allSaved=(STATE.confirmedDocs||[]).length>=MOCK_DOCS.length;
+  const sc=hasComms&&!allSaved?'orange':allSaved?'green':'red';
+  const sl={red:'Missing Required Documentation',orange:'Pending Review — New Documents Received',green:'Ready for Processing'};
+
+  wrap.innerHTML=`
+    <div class="section-header">
+      <div><div class="section-title">📊 Case Status Dashboard</div>
+      <div class="section-sub">Final summary for ${STATE.clientName}</div></div>
+      <div class="case-status"><div class="dot dot-${sc}"></div><span>${sl[sc]}</span></div>
+    </div>
+    <div class="metrics-bar">
+      <div class="metric-card"><div class="metric-val">${(STATE.confirmedDocs||[]).length}</div><div class="metric-lbl">Docs Saved</div></div>
+      <div class="metric-card"><div class="metric-val">${(STATE.commsLog||[]).length}</div><div class="metric-lbl">Messages Sent</div></div>
+      <div class="metric-card"><div class="metric-val">12s</div><div class="metric-lbl">AI Process Time</div></div>
+      <div class="metric-card"><div class="metric-val">~11 min</div><div class="metric-lbl">Time Saved</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+      <div class="card">
+        <div class="card-header"><span class="card-title">📂 Final Folder Structure</span></div>
+        <div class="card-body"><div class="folder-tree">
+          <div class="f-folder">📁 PACO Document Intake/</div>
+          <div class="f-folder" style="padding-left:18px">📁 UAP Applications / ${new Date().getFullYear()} / ${STATE.program}/</div>
+          <div class="f-folder" style="padding-left:36px">📁 ${STATE.uapNumber}_${STATE.clientName.replace(/ /g,'_')}/</div>
+          <div class="f-file" style="padding-left:54px">📄 ORIGINAL_PACKET.pdf</div>
+          ${(STATE.confirmedDocs||[]).map(d=>`<div class="f-file" style="padding-left:54px">📄 ${d.type.replace(/ /g,'')}.pdf</div>`).join('')}
+          <div class="f-comm" style="padding-left:54px">📁 Communications/ (${(STATE.commsLog||[]).length} logs)</div>
+        </div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">🔔 Notifications & Summary</span></div>
+        <div class="card-body">
+          <div class="alert alert-success">✅ Case saved to SharePoint successfully</div>
+          ${hasComms?`<div class="alert alert-info">📨 ${(STATE.commsLog||[]).length} message(s) sent to ${STATE.clientName}</div>`:''}
+          <div class="alert alert-info">📣 Teams notification sent to intake team</div>
+          <hr style="border:none;border-top:1px solid var(--gray-200);margin:14px 0"/>
+          <div style="font-size:13px;color:var(--gray-700);line-height:2.1">
+            <b>Client:</b> ${STATE.clientName}<br/>
+            <b>UAP #:</b> ${STATE.uapNumber}<br/>
+            <b>Program:</b> ${STATE.program}<br/>
+            <b>Processed By:</b> J. Martinez<br/>
+            <b>Date:</b> ${today()}
+          </div>
+        </div>
+      </div>
+    </div>
+    ${(STATE.commsLog||[]).length?`
+    <div class="card">
+      <div class="card-header"><span class="card-title">📋 Communication Log</span></div>
+      <div class="card-body">
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Time</th><th>Direction</th><th>Channel</th><th>Message</th></tr></thead>
+          <tbody>${(STATE.commsLog||[]).map(m=>`<tr>
+            <td>${m.time}</td>
+            <td><span class="status-badge ${m.dir==='out'?'auto':'review'}">${m.dir==='out'?'Outbound':'Inbound'}</span></td>
+            <td>${m.via}</td>
+            <td style="max-width:320px;font-size:13px">${m.text}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>
+    </div>`:''}
+    <div class="footer-bar">
+      <span style="color:var(--gray-400);font-size:12px">Case ${STATE.uapNumber} complete · ${today()}</span>
+      <button class="btn btn-primary" id="restart-btn">＋ Process New Packet</button>
+    </div>`;
+
+  wrap.querySelector('#restart-btn').addEventListener('click',()=>{
+    STATE={clientName:'',uapNumber:'',program:'UAP',intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[]};
+    go(1);
+  });
+  return wrap;
+}
+
+// ── Boot ───────────────────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

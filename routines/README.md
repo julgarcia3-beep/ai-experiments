@@ -6,6 +6,8 @@ A personal repository for organizing and tracking daily, weekly, and monthly rou
 
 ```
 routines/
+├── daily/            # Automated daily routines (scheduled skills)
+│   └── daily-intake.md   # 7:20 AM — Obsidian daily note builder
 ├── morning/          # Morning routine checklists and guides
 ├── evening/          # Evening/wind-down routine checklists
 ├── weekly/           # Weekly recurring tasks and reviews
@@ -13,6 +15,12 @@ routines/
 ├── templates/        # Reusable routine templates
 └── logs/             # Completed routine logs and reflections
 ```
+
+## Automated Routines
+
+| Routine | Schedule | System | Description |
+|---------|----------|--------|-------------|
+| [Daily Intake](daily/daily-intake.md) | 7:20 AM daily | Obsidian | Builds daily note with calendar, carry-overs, projects, golf/fitness, email triage |
 
 ## How to Use
 
@@ -23,6 +31,7 @@ routines/
 
 ## Quick Start
 
+- **Automated:** [Daily Intake](daily/daily-intake.md) runs at 7:20 AM — builds your Obsidian daily note
 - Start with the [Morning Routine](morning/morning-routine.md)
 - End your day with the [Evening Routine](evening/evening-routine.md)
 - Every Sunday, do your [Weekly Review](weekly/weekly-review.md)

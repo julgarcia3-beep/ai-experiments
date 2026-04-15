@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.julio.obsidian-sync</string>
+
+    <key>Comment</key>
+    <string>Syncs daily notes from Google Drive (Obsidian Sync/50-Daily) into the Obsidian vault every 5 minutes.</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/juliogarcia/Scripts/sync-to-obsidian.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>300</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/juliogarcia/Library/Logs/obsidian-sync-stdout.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/Users/juliogarcia/Library/Logs/obsidian-sync-stderr.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/juliogarcia</string>
+    </dict>
+</dict>
+</plist>

@@ -117,7 +117,7 @@ for slug in "${ORDER[@]}"; do
   existing="${OBSIDIAN_RESEARCH}/${TODAY}-${slug}.md"
   if [[ -f "${existing}" ]]; then
     log "Skipped (already processed): \"${slug}\""
-    ((SKIPPED++))
+    SKIPPED=$((SKIPPED + 1))
   else
     TO_PROCESS+=("${slug}")
   fi
@@ -152,12 +152,12 @@ for i in "${!TO_PROCESS[@]}"; do
     end_time=$(date +%s)
     duration=$(( end_time - start_time ))
     log "DONE \"${topic}\" (${duration}s)"
-    ((PROCESSED++))
+    PROCESSED=$((PROCESSED + 1))
   else
     end_time=$(date +%s)
     duration=$(( end_time - start_time ))
     log "FAILED \"${topic}\" after ${duration}s"
-    ((FAILED++))
+    FAILED=$((FAILED + 1))
   fi
 done
 

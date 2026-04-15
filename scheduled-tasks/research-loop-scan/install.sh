@@ -32,6 +32,16 @@ fi
 # Install / update
 # ---------------------------------------------------------------------------
 
+# Check that crontab is available
+if ! command -v crontab &>/dev/null; then
+  echo "ERROR: 'crontab' command not found."
+  echo "Install cron (e.g., apt install cron) or add the schedule manually."
+  echo ""
+  echo "Manual entry for your scheduler:"
+  echo "  ${CRON_SCHEDULE} ${SCANNER}"
+  exit 1
+fi
+
 # Verify scanner exists and is executable
 if [[ ! -x "${SCANNER}" ]]; then
   echo "ERROR: scanner.sh not found or not executable at ${SCANNER}"

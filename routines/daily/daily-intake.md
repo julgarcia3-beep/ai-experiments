@@ -266,6 +266,49 @@ The template already includes the full weakness table. When generating practice 
 
 Be specific in suggestions: "Hit 20 balls with your 7i from 145 yards, focusing on ball-first contact" beats "work on your irons."
 
+## Delivery — Google Drive → Obsidian Sync
+
+When running remotely (cloud, CI, or any environment without direct iCloud filesystem access), the daily note must be pushed to Google Drive as the delivery path into Obsidian.
+
+### Google Drive Sync Folder
+
+| Item | Value |
+|------|-------|
+| **Folder** | `Obsidian Sync / 50-Daily /` |
+| **Folder ID (Obsidian Sync)** | `1UEAohGBRqi7T-9olpmTPo9hDlyoEIwhZ` |
+| **Folder ID (50-Daily)** | `1b6ySYjIS9fjESe0uJy9ZMjqLGAzXOUBv` |
+| **Drive owner** | `julgarcia3@gmail.com` |
+
+### Step 6: Push to Google Drive
+
+After Step 5 (writing the note), push a copy to Google Drive:
+
+1. **Base64 encode** the completed daily note content.
+2. **Use `create_file`** (Google Drive MCP) with:
+   - `title`: `YYYY-MM-DD.md` (today's date)
+   - `mimeType`: `text/markdown`
+   - `parentId`: `1b6ySYjIS9fjESe0uJy9ZMjqLGAzXOUBv` (the 50-Daily folder)
+   - `disableConversionToGoogleType`: `true` (keep as raw markdown, not Google Doc)
+   - `content`: the base64-encoded note content
+3. **If the file already exists** for today (updating, not creating), use `search_files` with `title = 'YYYY-MM-DD.md' and parentId = '1b6ySYjIS9fjESe0uJy9ZMjqLGAzXOUBv'` to find it, then delete and recreate (Google Drive MCP doesn't support in-place update of content).
+
+### Local Sync (on Mac)
+
+On Julio's Mac, set up one of these to auto-sync Google Drive → Obsidian vault:
+
+- **Google Drive for Desktop** — sync the `Obsidian Sync/50-Daily/` folder to `{VAULT_ROOT}/50-Daily/`
+- **rclone** — `rclone sync gdrive:Obsidian\ Sync/50-Daily/ "{VAULT_ROOT}/50-Daily/" --include "*.md"` on a cron/launchd schedule
+- **Hazel rule** — watch the Google Drive local folder and copy new `.md` files into the vault
+
+### Delivery Priority
+
+| Environment | Primary Delivery | Fallback |
+|-------------|-----------------|----------|
+| Local (Mac, vault accessible) | Direct filesystem write to `{VAULT_ROOT}/50-Daily/` | Google Drive push |
+| Remote (cloud, web, CI) | Google Drive push to `Obsidian Sync/50-Daily/` | GitHub commit to routines repo |
+
+**Always attempt both when possible.** Direct filesystem is instant (Obsidian sees it immediately). Google Drive adds a sync delay but works from anywhere.
+
 ## No Notion Backup
 
-Do not back up the daily note to Notion. Obsidian is the only destination.
+Do not back up the daily note to Notion. Obsidian is the only destination (via direct filesystem or Google Drive sync).

@@ -1,0 +1,114 @@
+name: Daily Intake — Obsidian Daily Note
+
+# Runs at 7:20 AM Eastern Time via Claude Code.
+# Builds Julio's Obsidian daily note with calendar, carry-overs,
+# projects, email triage, and golf/fitness context.
+# Delivers to Google Drive → syncs to Obsidian via launchd on Mac.
+
+on:
+  schedule:
+    # 7:20 AM EDT = 11:20 UTC (Mar–Nov)
+    # During EST (Nov–Mar) this fires at 6:20 AM ET. Adjust if needed:
+    #   - cron: '20 12 * * *'  # uncomment for EST (7:20 AM EST = 12:20 UTC)
+    - cron: '20 11 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Override time-of-day mode'
+        required: false
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - morning
+          - midday
+          - evening
+          - carryover
+
+permissions:
+  contents: read
+
+jobs:
+  daily-intake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Determine time-of-day mode
+        id: mode
+        run: |
+          if [ "${{ inputs.mode }}" != "" ] && [ "${{ inputs.mode }}" != "auto" ]; then
+            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+          else
+            HOUR=$(TZ='America/New_York' date '+%H')
+            if [ "$HOUR" -lt 12 ]; then
+              echo "mode=morning" >> "$GITHUB_OUTPUT"
+            elif [ "$HOUR" -lt 17 ]; then
+              echo "mode=midday" >> "$GITHUB_OUTPUT"
+            else
+              echo "mode=evening" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
+      - name: Run daily intake
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Google Drive MCP credentials
+          GOOGLE_DRIVE_CLIENT_ID: ${{ secrets.GOOGLE_DRIVE_CLIENT_ID }}
+          GOOGLE_DRIVE_CLIENT_SECRET: ${{ secrets.GOOGLE_DRIVE_CLIENT_SECRET }}
+          GOOGLE_DRIVE_REFRESH_TOKEN: ${{ secrets.GOOGLE_DRIVE_REFRESH_TOKEN }}
+          # Microsoft 365 MCP credentials (Outlook calendar + email)
+          MS365_CLIENT_ID: ${{ secrets.MS365_CLIENT_ID }}
+          MS365_CLIENT_SECRET: ${{ secrets.MS365_CLIENT_SECRET }}
+          MS365_REFRESH_TOKEN: ${{ secrets.MS365_REFRESH_TOKEN }}
+          MS365_TENANT_ID: ${{ secrets.MS365_TENANT_ID }}
+        run: |
+          TODAY=$(TZ='America/New_York' date '+%Y-%m-%d')
+          NOW=$(TZ='America/New_York' date '+%H:%M %Z')
+          MODE="${{ steps.mode.outputs.mode }}"
+
+          cat > /tmp/daily-intake-prompt.txt << PROMPT
+          You are running as a scheduled CI job. Read the skill spec below and execute it.
+
+          **Today:** ${TODAY}
+          **Current time:** ${NOW}
+          **Mode:** ${MODE} (see "Time-of-Day Awareness" in the spec)
+          **Environment:** Remote/CI — no local filesystem access to the Obsidian vault.
+          **Delivery:** Google Drive ONLY. Push to folder ID 1b6ySYjIS9fjESe0uJy9ZMjqLGAzXOUBv.
+
+          Instructions:
+          1. Skip Step 1 (no local vault access).
+          2. Skip Step 2's local file creation — build the note content in memory.
+          3. Execute Step 3 (gather context) using available MCP tools:
+             - Calendar: Use ms365 outlook_calendar_search for today's events
+             - Email: Use ms365 outlook_email_search for Hard Rule / Strategic email triage
+             - Projects/carry-overs: Skip (no vault access) — note this gap in Daily Intel
+          4. Execute Step 4 — build the full daily note content following the spec.
+          5. Execute Step 6 — push to Google Drive as ${TODAY}.md in the 50-Daily folder.
+
+          If Google Drive delivery fails, output the note content to stdout as a fallback.
+
+          --- SKILL SPEC ---
+          $(cat routines/daily/daily-intake.md)
+          PROMPT
+
+          claude -p "$(cat /tmp/daily-intake-prompt.txt)" \
+            --allowedTools "mcp__Google-Drive__*,mcp__ms365__*" \
+            --max-turns 25
+
+      - name: Log result
+        if: always()
+        run: |
+          echo "Daily intake completed at $(TZ='America/New_York' date '+%Y-%m-%d %H:%M %Z')"
+          echo "Mode: ${{ steps.mode.outputs.mode }}"

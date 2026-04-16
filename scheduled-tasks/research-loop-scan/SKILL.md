@@ -3,7 +3,7 @@
 > **Responsibility:** Scan Obsidian daily notes for research tags and dispatch each
 > tagged topic to the `research-loop` pipeline skill.
 >
-> **Schedule:** Daily at 22:00 (10 PM), 7 days a week.
+> **Schedule:** Daily at 12:00 (noon), 7 days a week.
 >
 > **Boundary:** This file defines the *scanner*. The pipeline it dispatches to
 > lives at `skills/research-loop/SKILL.md`. Two files, two responsibilities.
@@ -15,7 +15,7 @@
 | Field | Value |
 |---|---|
 | Frequency | Daily (7 days — includes weekends) |
-| Time | 22:00 local time (cron) / 22:00 UTC (GitHub Actions) |
+| Time | 12:00 local time (cron) / 12:00 UTC (GitHub Actions) |
 | Runner — local | `scanner.sh` via cron (`install.sh`) |
 | Runner — cloud | GitHub Actions workflow (`.github/workflows/research-loop-scan.yml`) |
 
@@ -130,12 +130,12 @@ All output is logged to:
 
 Log format:
 ```
-[22:00:01] research-loop-scan START
-[22:00:01] Scanning: ~/Documents/AI Data Hub/Obsidian/DailyNotes/2026-04-15.md
-[22:00:01] Scanning: ~/Documents/AI Data Hub/Obsidian/DailyNotes/2026-04-14.md
-[22:00:02] Found 3 tagged topics, 2 unique after dedup
-[22:00:02] Skipped (already processed): "llm-fine-tuning"
-[22:00:02] Processing 1/1: "Prompt Engineering Patterns" [personal]
+[12:00:01] research-loop-scan START
+[12:00:01] Scanning: ~/Documents/AI Data Hub/Obsidian/DailyNotes/2026-04-15.md
+[12:00:01] Scanning: ~/Documents/AI Data Hub/Obsidian/DailyNotes/2026-04-14.md
+[12:00:02] Found 3 tagged topics, 2 unique after dedup
+[12:00:02] Skipped (already processed): "llm-fine-tuning"
+[12:00:02] Processing 1/1: "Prompt Engineering Patterns" [personal]
 [22:05:30] [research-loop] DONE "Prompt Engineering Patterns" ...
 [22:05:30] research-loop-scan COMPLETE — 1 processed, 1 skipped, 0 failed
 ```

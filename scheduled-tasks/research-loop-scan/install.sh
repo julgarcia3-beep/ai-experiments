@@ -2,17 +2,17 @@
 # install.sh — Install (or update) the research-loop-scan cron job.
 #
 # Usage:
-#   ./install.sh           # Install cron for 10 PM daily
+#   ./install.sh           # Install cron for 12 PM daily
 #   ./install.sh --remove  # Remove the cron entry
 #
-# The cron job runs scanner.sh every day at 22:00 local time.
+# The cron job runs scanner.sh every day at 12:00 (noon) local time.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCANNER="${SCRIPT_DIR}/scanner.sh"
 CRON_ID="# research-loop-scan"
-CRON_SCHEDULE="0 22 * * *"
+CRON_SCHEDULE="0 12 * * *"
 CRON_LINE="${CRON_SCHEDULE} ${SCANNER} ${CRON_ID}"
 
 # ---------------------------------------------------------------------------
@@ -73,7 +73,7 @@ else
 fi
 
 echo "Installed research-loop-scan cron job:"
-echo "  Schedule: Daily at 22:00 (10 PM)"
+echo "  Schedule: Daily at 12:00 (noon)"
 echo "  Command:  ${SCANNER}"
 echo ""
 echo "Verify with: crontab -l"

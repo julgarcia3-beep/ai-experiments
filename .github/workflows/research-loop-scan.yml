@@ -2,10 +2,10 @@ name: Research Loop Scan
 
 on:
   schedule:
-    # Runs at 10 PM UTC daily (adjust for your timezone)
-    # For US Eastern: use "0 2 * * *" (10 PM ET = 2 AM UTC next day)
-    # For US Pacific: use "0 5 * * *" (10 PM PT = 5 AM UTC next day)
-    - cron: "0 22 * * *"
+    # Runs at 12 PM (noon) UTC daily
+    # For US Eastern: this is 8 AM ET
+    # For US Pacific: this is 5 AM PT
+    - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       dry_run:

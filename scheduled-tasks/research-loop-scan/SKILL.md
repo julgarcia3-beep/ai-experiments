@@ -15,11 +15,35 @@
 | Field | Value |
 |---|---|
 | Frequency | Daily (7 days — includes weekends) |
-| Time | 22:00 local time |
-| Runner | `scanner.sh` in this directory, installed via cron |
+| Time | 22:00 local time (cron) / 22:00 UTC (GitHub Actions) |
+| Runner — local | `scanner.sh` via cron (`install.sh`) |
+| Runner — cloud | GitHub Actions workflow (`.github/workflows/research-loop-scan.yml`) |
 
 Running daily (not weekdays-only) ensures tags added on Friday evening, Saturday,
 or Sunday are never missed.
+
+---
+
+## Modes
+
+The scanner supports two execution modes:
+
+### Local mode (default)
+
+- Set by: `SCANNER_MODE=local` (or unset)
+- Reads daily notes from `~/Documents/AI Data Hub/Obsidian/DailyNotes/`
+- Dispatches via `claude research-loop` CLI
+- Installed via `./install.sh` (cron)
+
+### Cloud mode
+
+- Set by: `SCANNER_MODE=cloud`
+- Reads daily notes from `daily-notes/` in the repo (or `CLOUD_DAILY_DIR`)
+- Writes research output to `research-output/` (or `CLOUD_RESEARCH_DIR`)
+- If `claude` CLI is not available, generates **topic manifests** — Markdown
+  files with frontmatter and a pipeline command for later execution
+- Results are committed back to the repo by the GitHub Actions workflow
+- Triggered on schedule or manually via `workflow_dispatch`
 
 ---
 

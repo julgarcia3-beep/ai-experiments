@@ -1,0 +1,119 @@
+name: Research Loop Scan
+
+on:
+  schedule:
+    # Runs at 10 PM UTC daily (adjust for your timezone)
+    # For US Eastern: use "0 2 * * *" (10 PM ET = 2 AM UTC next day)
+    # For US Pacific: use "0 5 * * *" (10 PM PT = 5 AM UTC next day)
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (log without dispatching)"
+        required: false
+        default: "false"
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  SCANNER_MODE: cloud
+  DAILY_NOTES_DIR: daily-notes
+  RESEARCH_OUTPUT_DIR: research-output
+  LOGS_DIR: logs/research-loop-scan
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up dates
+        id: dates
+        run: |
+          echo "today=$(date +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+          echo "yesterday=$(date -d 'yesterday' +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Check for daily notes
+        id: check-notes
+        run: |
+          TODAY="${{ steps.dates.outputs.today }}"
+          YESTERDAY="${{ steps.dates.outputs.yesterday }}"
+          FOUND=0
+
+          if [[ -f "${DAILY_NOTES_DIR}/${TODAY}.md" ]]; then
+            echo "Found today's note: ${DAILY_NOTES_DIR}/${TODAY}.md"
+            FOUND=$((FOUND + 1))
+          else
+            echo "::warning::Today's daily note not found: ${DAILY_NOTES_DIR}/${TODAY}.md"
+          fi
+
+          if [[ -f "${DAILY_NOTES_DIR}/${YESTERDAY}.md" ]]; then
+            echo "Found yesterday's note: ${DAILY_NOTES_DIR}/${YESTERDAY}.md"
+            FOUND=$((FOUND + 1))
+          else
+            echo "::warning::Yesterday's daily note not found: ${DAILY_NOTES_DIR}/${YESTERDAY}.md"
+          fi
+
+          echo "notes_found=${FOUND}" >> "$GITHUB_OUTPUT"
+
+      - name: Run scanner
+        if: steps.check-notes.outputs.notes_found != '0'
+        id: scanner
+        env:
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          chmod +x scheduled-tasks/research-loop-scan/scanner.sh
+          export SCANNER_MODE=cloud
+          export CLOUD_DAILY_DIR="${GITHUB_WORKSPACE}/${DAILY_NOTES_DIR}"
+          export CLOUD_RESEARCH_DIR="${GITHUB_WORKSPACE}/${RESEARCH_OUTPUT_DIR}"
+          export CLOUD_LOG_DIR="${GITHUB_WORKSPACE}/${LOGS_DIR}"
+
+          mkdir -p "${CLOUD_RESEARCH_DIR}" "${CLOUD_LOG_DIR}"
+
+          bash scheduled-tasks/research-loop-scan/scanner.sh 2>&1 | tee scanner-output.txt
+
+          # Parse results for summary
+          PROCESSED=$(grep -oP '(\d+) processed' scanner-output.txt | grep -oP '\d+' || echo "0")
+          SKIPPED=$(grep -oP '(\d+) skipped' scanner-output.txt | grep -oP '\d+' || echo "0")
+          FAILED=$(grep -oP '(\d+) failed' scanner-output.txt | grep -oP '\d+' || echo "0")
+
+          echo "processed=${PROCESSED}" >> "$GITHUB_OUTPUT"
+          echo "skipped=${SKIPPED}" >> "$GITHUB_OUTPUT"
+          echo "failed=${FAILED}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit research output
+        if: steps.check-notes.outputs.notes_found != '0'
+        run: |
+          git config user.name "research-loop-scan[bot]"
+          git config user.email "research-loop-scan[bot]@users.noreply.github.com"
+
+          # Add any new research output and logs
+          git add "${RESEARCH_OUTPUT_DIR}/" "${LOGS_DIR}/" 2>/dev/null || true
+
+          if git diff --staged --quiet; then
+            echo "No new research output to commit."
+          else
+            git commit -m "research-loop-scan: $(date +%Y-%m-%d) — ${{ steps.scanner.outputs.processed }} processed, ${{ steps.scanner.outputs.skipped }} skipped, ${{ steps.scanner.outputs.failed }} failed"
+            git push
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Research Loop Scan Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Count |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Processed | ${{ steps.scanner.outputs.processed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Skipped | ${{ steps.scanner.outputs.skipped || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Failed | ${{ steps.scanner.outputs.failed || '0' }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Date:** $(date +%Y-%m-%d)" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Mode:** cloud (GitHub Actions)" >> "$GITHUB_STEP_SUMMARY"

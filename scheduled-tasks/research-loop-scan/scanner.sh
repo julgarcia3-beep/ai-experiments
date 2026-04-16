@@ -3,18 +3,33 @@
 # Scans Obsidian daily notes for research tags, deduplicates, and dispatches
 # each topic to the research-loop pipeline skill.
 #
-# Schedule: Daily at 22:00 via cron (see install.sh)
-# Docs:     scheduled-tasks/research-loop-scan/SKILL.md
+# Modes:
+#   local (default) — reads ~/Documents/AI Data Hub, runs via cron
+#   cloud           — reads repo-relative paths, runs via GitHub Actions
+#
+# Set SCANNER_MODE=cloud to use cloud paths (env vars CLOUD_DAILY_DIR,
+# CLOUD_RESEARCH_DIR, CLOUD_LOG_DIR override defaults).
+#
+# Docs: scheduled-tasks/research-loop-scan/SKILL.md
 
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration — adapts to local or cloud mode
 # ---------------------------------------------------------------------------
-OBSIDIAN_DAILY="${HOME}/Documents/AI Data Hub/Obsidian/DailyNotes"
-OBSIDIAN_RESEARCH="${HOME}/Documents/AI Data Hub/Obsidian/Research"
-OUTPUT_DIR="${HOME}/Documents/AI Data Hub/outputs/research"
-LOG_DIR="${HOME}/Documents/AI Data Hub/logs/research-loop-scan"
+SCANNER_MODE="${SCANNER_MODE:-local}"
+
+if [[ "${SCANNER_MODE}" == "cloud" ]]; then
+  OBSIDIAN_DAILY="${CLOUD_DAILY_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/daily-notes}"
+  OBSIDIAN_RESEARCH="${CLOUD_RESEARCH_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/research-output}"
+  OUTPUT_DIR="${CLOUD_RESEARCH_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/research-output}"
+  LOG_DIR="${CLOUD_LOG_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/logs/research-loop-scan}"
+else
+  OBSIDIAN_DAILY="${HOME}/Documents/AI Data Hub/Obsidian/DailyNotes"
+  OBSIDIAN_RESEARCH="${HOME}/Documents/AI Data Hub/Obsidian/Research"
+  OUTPUT_DIR="${HOME}/Documents/AI Data Hub/outputs/research"
+  LOG_DIR="${HOME}/Documents/AI Data Hub/logs/research-loop-scan"
+fi
 
 TODAY=$(date +%Y-%m-%d)
 YESTERDAY=$(date -d "yesterday" +%Y-%m-%d 2>/dev/null || date -v-1d +%Y-%m-%d)
@@ -137,6 +152,15 @@ fi
 PROCESSED=0
 FAILED=0
 
+# In cloud mode, check if claude CLI is available. If not, generate
+# placeholder research notes that capture the extracted topics for
+# later processing or manual review.
+CLOUD_NO_CLI=false
+if [[ "${SCANNER_MODE}" == "cloud" ]] && ! command -v claude &>/dev/null; then
+  CLOUD_NO_CLI=true
+  log "Cloud mode: claude CLI not available — generating topic manifests"
+fi
+
 for i in "${!TO_PROCESS[@]}"; do
   slug="${TO_PROCESS[$i]}"
   entry="${TOPICS[${slug}]}"
@@ -148,7 +172,37 @@ for i in "${!TO_PROCESS[@]}"; do
   log "Processing ${idx}/${PROCESS_COUNT}: \"${topic}\" [${context}]"
   start_time=$(date +%s)
 
-  if claude research-loop "${topic}" --auto --"${context}" 2>&1 | tee -a "${LOG_FILE}"; then
+  if [[ "${CLOUD_NO_CLI}" == "true" ]]; then
+    # Cloud fallback: write a topic manifest so results are tracked in the repo
+    manifest="${OBSIDIAN_RESEARCH}/${TODAY}-${slug}.md"
+    cat > "${manifest}" << MANIFEST_EOF
+---
+title: "Research Loop — ${topic}"
+date: ${TODAY}
+context: ${context}
+tags:
+  - research
+  - ${tag}
+status: pending-pipeline
+scanner-mode: cloud
+---
+
+# Research Loop — ${topic}
+
+**Status:** Scanned — awaiting pipeline execution
+
+This topic was extracted by the cloud scanner on ${TODAY}.
+Run the full pipeline manually or wait for a CLI-enabled runner:
+
+\`\`\`
+claude research-loop "${topic}" --auto --${context}
+\`\`\`
+MANIFEST_EOF
+    end_time=$(date +%s)
+    duration=$(( end_time - start_time ))
+    log "MANIFEST \"${topic}\" → ${manifest} (${duration}s)"
+    PROCESSED=$((PROCESSED + 1))
+  elif claude research-loop "${topic}" --auto --"${context}" 2>&1 | tee -a "${LOG_FILE}"; then
     end_time=$(date +%s)
     duration=$(( end_time - start_time ))
     log "DONE \"${topic}\" (${duration}s)"

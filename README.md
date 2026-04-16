@@ -28,7 +28,7 @@ runs each tagged topic through the full research pipeline.
 | `#research-later` | personal |
 | `#deep-dive` | personal |
 
-### Setup
+### Setup — Local (cron)
 
 ```bash
 cd scheduled-tasks/research-loop-scan
@@ -36,18 +36,36 @@ cd scheduled-tasks/research-loop-scan
 ./install.sh --remove # removes the cron entry
 ```
 
+### Setup — Cloud (GitHub Actions)
+
+The workflow runs automatically at 10 PM UTC daily. To use it:
+
+1. Sync your Obsidian daily notes to `daily-notes/` in this repo (see `daily-notes/SYNC.md`).
+2. The Action scans for tags, generates topic manifests, and commits results to `research-output/`.
+3. Trigger manually via **Actions > Research Loop Scan > Run workflow** (supports dry-run).
+
 ### File structure
 
 ```
+.github/workflows/
+  research-loop-scan.yml   # Cloud scheduler (GitHub Actions)
+
 scheduled-tasks/research-loop-scan/
-  SKILL.md       # Scanner spec (schedule, tags, dedup, dispatch)
-  scanner.sh     # The executable scanner script
-  install.sh     # Cron installer/uninstaller
+  SKILL.md           # Scanner spec (schedule, tags, dedup, modes)
+  scanner.sh         # The executable scanner (local + cloud modes)
+  install.sh         # Local cron installer/uninstaller
+  test_scanner.sh    # Integration test suite (10 tests, 22 assertions)
 
 skills/research-loop/
-  SKILL.md       # Pipeline spec (firecrawl, NotebookLM, Obsidian, Notion)
+  SKILL.md           # Pipeline spec (firecrawl, NotebookLM, Obsidian, Notion)
+
+daily-notes/         # Cloud mode: sync Obsidian daily notes here
+  SYNC.md            # Sync instructions
+research-output/     # Cloud mode: generated manifests (auto-committed)
+logs/                # Cloud mode: scanner logs (auto-committed)
 ```
 
 ### Logs
 
-Scanner logs are written to `~/Documents/AI Data Hub/logs/research-loop-scan/<YYYY-MM-DD>.log`.
+- **Local:** `~/Documents/AI Data Hub/logs/research-loop-scan/<YYYY-MM-DD>.log`
+- **Cloud:** `logs/research-loop-scan/<YYYY-MM-DD>.log` (committed to repo) + GitHub Actions run summary

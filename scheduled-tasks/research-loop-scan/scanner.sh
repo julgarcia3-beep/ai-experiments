@@ -1,0 +1,235 @@
+#!/usr/bin/env bash
+# research-loop-scan — scanner.sh
+# Scans Obsidian daily notes for research tags, deduplicates, and dispatches
+# each topic to the research-loop pipeline skill.
+#
+# Modes:
+#   local (default) — reads ~/Documents/AI Data Hub, runs via cron
+#   cloud           — reads repo-relative paths, runs via GitHub Actions
+#
+# Set SCANNER_MODE=cloud to use cloud paths (env vars CLOUD_DAILY_DIR,
+# CLOUD_RESEARCH_DIR, CLOUD_LOG_DIR override defaults).
+#
+# Docs: scheduled-tasks/research-loop-scan/SKILL.md
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Configuration — adapts to local or cloud mode
+# ---------------------------------------------------------------------------
+SCANNER_MODE="${SCANNER_MODE:-local}"
+
+if [[ "${SCANNER_MODE}" == "cloud" ]]; then
+  OBSIDIAN_DAILY="${CLOUD_DAILY_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/daily-notes}"
+  OBSIDIAN_RESEARCH="${CLOUD_RESEARCH_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/research-output}"
+  OUTPUT_DIR="${CLOUD_RESEARCH_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/research-output}"
+  LOG_DIR="${CLOUD_LOG_DIR:-${GITHUB_WORKSPACE:-$(pwd)}/logs/research-loop-scan}"
+else
+  OBSIDIAN_DAILY="${HOME}/Documents/AI Data Hub/Obsidian/DailyNotes"
+  OBSIDIAN_RESEARCH="${HOME}/Documents/AI Data Hub/Obsidian/Research"
+  OUTPUT_DIR="${HOME}/Documents/AI Data Hub/outputs/research"
+  LOG_DIR="${HOME}/Documents/AI Data Hub/logs/research-loop-scan"
+fi
+
+TODAY=$(date +%Y-%m-%d)
+YESTERDAY=$(date -d "yesterday" +%Y-%m-%d 2>/dev/null || date -v-1d +%Y-%m-%d)
+
+mkdir -p "${LOG_DIR}" "${OUTPUT_DIR}" "${OBSIDIAN_RESEARCH}"
+LOG_FILE="${LOG_DIR}/${TODAY}.log"
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+log() {
+  local ts
+  ts=$(date +"%H:%M:%S")
+  echo "[${ts}] $*" | tee -a "${LOG_FILE}"
+}
+
+to_slug() {
+  # lowercase, spaces to hyphens, strip non-alphanumeric/hyphens
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/ /-/g; s/[^a-z0-9-]//g; s/--*/-/g; s/^-//; s/-$//'
+}
+
+tag_to_context() {
+  local tag="$1"
+  if [[ "${tag}" == "#research-for-work" ]]; then
+    echo "work"
+  else
+    echo "personal"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+log "research-loop-scan START"
+
+# Collect daily note files to scan (today + yesterday)
+declare -a NOTE_FILES=()
+for dt in "${TODAY}" "${YESTERDAY}"; do
+  note_path="${OBSIDIAN_DAILY}/${dt}.md"
+  if [[ -f "${note_path}" ]]; then
+    NOTE_FILES+=("${note_path}")
+    log "Scanning: ${note_path}"
+  else
+    log "WARNING: Daily note not found — ${note_path}"
+  fi
+done
+
+if [[ ${#NOTE_FILES[@]} -eq 0 ]]; then
+  log "No daily note files found. Exiting."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Extract tagged lines
+# Tag pattern: #research-for-work | #research-topic | #research-later | #deep-dive
+# ---------------------------------------------------------------------------
+declare -A TOPICS=()   # slug -> "tag|topic"
+declare -a ORDER=()    # preserve discovery order
+
+TAG_PATTERN='^[[:space:]]*(#research-for-work|#research-topic|#research-later|#deep-dive)[[:space:]]+'
+
+for note_file in "${NOTE_FILES[@]}"; do
+  while IFS= read -r line; do
+    # Extract tag and topic
+    tag=$(echo "${line}" | grep -oE '(#research-for-work|#research-topic|#research-later|#deep-dive)' | head -1)
+    topic=$(echo "${line}" | sed -E "s/^[[:space:]]*(#research-for-work|#research-topic|#research-later|#deep-dive)[[:space:]]+//" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+    # Skip empty topics
+    if [[ -z "${topic}" ]]; then
+      continue
+    fi
+
+    slug=$(to_slug "${topic}")
+
+    # Dedup: skip if we already have this slug
+    if [[ -n "${TOPICS[${slug}]+x}" ]]; then
+      continue
+    fi
+
+    TOPICS["${slug}"]="${tag}|${topic}"
+    ORDER+=("${slug}")
+  done < <(grep -E "${TAG_PATTERN}" "${note_file}" 2>/dev/null || true)
+done
+
+TOTAL_FOUND=${#ORDER[@]}
+log "Found ${TOTAL_FOUND} tagged topics (unique after cross-day dedup)"
+
+if [[ ${TOTAL_FOUND} -eq 0 ]]; then
+  log "No research tags found. Exiting."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Filter out already-processed topics (today's date)
+# ---------------------------------------------------------------------------
+declare -a TO_PROCESS=()
+SKIPPED=0
+
+for slug in "${ORDER[@]}"; do
+  existing="${OBSIDIAN_RESEARCH}/${TODAY}-${slug}.md"
+  if [[ -f "${existing}" ]]; then
+    log "Skipped (already processed): \"${slug}\""
+    SKIPPED=$((SKIPPED + 1))
+  else
+    TO_PROCESS+=("${slug}")
+  fi
+done
+
+PROCESS_COUNT=${#TO_PROCESS[@]}
+log "${PROCESS_COUNT} to process, ${SKIPPED} skipped (already processed)"
+
+if [[ ${PROCESS_COUNT} -eq 0 ]]; then
+  log "All topics already processed. Exiting."
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Dispatch to research-loop pipeline
+# ---------------------------------------------------------------------------
+PROCESSED=0
+FAILED=0
+
+# In cloud mode, check if claude CLI is available. If not, generate
+# placeholder research notes that capture the extracted topics for
+# later processing or manual review.
+CLOUD_NO_CLI=false
+if [[ "${SCANNER_MODE}" == "cloud" ]] && ! command -v claude &>/dev/null; then
+  CLOUD_NO_CLI=true
+  log "Cloud mode: claude CLI not available — generating topic manifests"
+fi
+
+for i in "${!TO_PROCESS[@]}"; do
+  slug="${TO_PROCESS[$i]}"
+  entry="${TOPICS[${slug}]}"
+  tag="${entry%%|*}"
+  topic="${entry#*|}"
+  context=$(tag_to_context "${tag}")
+  idx=$((i + 1))
+
+  log "Processing ${idx}/${PROCESS_COUNT}: \"${topic}\" [${context}]"
+  start_time=$(date +%s)
+
+  if [[ "${CLOUD_NO_CLI}" == "true" ]]; then
+    # Cloud fallback: write a topic manifest so results are tracked in the repo
+    manifest="${OBSIDIAN_RESEARCH}/${TODAY}-${slug}.md"
+    cat > "${manifest}" << MANIFEST_EOF
+---
+title: "Research Loop — ${topic}"
+date: ${TODAY}
+context: ${context}
+tags:
+  - research
+  - ${tag}
+status: pending-pipeline
+scanner-mode: cloud
+---
+
+# Research Loop — ${topic}
+
+**Status:** Scanned — awaiting pipeline execution
+
+This topic was extracted by the cloud scanner on ${TODAY}.
+Run the full pipeline manually or wait for a CLI-enabled runner:
+
+\`\`\`
+claude research-loop "${topic}" --auto --${context}
+\`\`\`
+MANIFEST_EOF
+    end_time=$(date +%s)
+    duration=$(( end_time - start_time ))
+    log "MANIFEST \"${topic}\" → ${manifest} (${duration}s)"
+    PROCESSED=$((PROCESSED + 1))
+  elif claude research-loop "${topic}" --auto --"${context}" 2>&1 | tee -a "${LOG_FILE}"; then
+    end_time=$(date +%s)
+    duration=$(( end_time - start_time ))
+    log "DONE \"${topic}\" (${duration}s)"
+    PROCESSED=$((PROCESSED + 1))
+  else
+    end_time=$(date +%s)
+    duration=$(( end_time - start_time ))
+    log "FAILED \"${topic}\" after ${duration}s"
+    FAILED=$((FAILED + 1))
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+log "research-loop-scan COMPLETE — ${PROCESSED} processed, ${SKIPPED} skipped, ${FAILED} failed"
+
+# Desktop notification (optional, non-fatal)
+if command -v notify-send &>/dev/null; then
+  notify-send "Research Loop Scan Complete" \
+    "Processed: ${PROCESSED} | Skipped: ${SKIPPED} | Failed: ${FAILED}" \
+    2>/dev/null || true
+fi
+
+# Exit non-zero only if ALL topics failed
+if [[ ${PROCESSED} -eq 0 && ${FAILED} -gt 0 ]]; then
+  exit 1
+fi
+
+exit 0

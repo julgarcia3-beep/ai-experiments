@@ -53,6 +53,13 @@ label{font-size:11px;font-weight:600;color:var(--gray-700);text-transform:upperc
 input,select,textarea{border:1px solid var(--gray-300);border-radius:6px;padding:8px 11px;font-size:14px;font-family:inherit;color:var(--gray-900);background:#fff;width:100%;transition:border-color .15s}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(15,108,189,.12)}
 input[readonly]{background:var(--gray-100);color:var(--gray-600)}
+input.is-missing,select.is-missing{border-color:var(--red);background:#fff7f7}
+input.is-missing:focus,select.is-missing:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(220,38,38,.12)}
+.field-hint{font-size:11px;color:var(--red);font-weight:500;min-height:14px}
+.footer-hint{font-size:12px;color:var(--gray-400);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.footer-hint.missing{color:var(--red);font-weight:500}
+.footer-hint.ready{color:var(--green);font-weight:500}
+.footer-hint.demo{color:var(--orange);font-weight:500}
 textarea{resize:vertical;min-height:80px}
 
 /* Buttons */
@@ -280,8 +287,8 @@ function step1(){
       <div class="card-header"><span class="card-title">👤 Required Information</span></div>
       <div class="card-body">
         <div class="form-grid">
-          <div class="form-group"><label>Client Name *</label><input id="f-name" type="text" placeholder="Maria Rivera" value="${STATE.clientName}"/></div>
-          <div class="form-group"><label>UAP Number *</label><input id="f-uap" type="text" placeholder="847221" value="${STATE.uapNumber}"/></div>
+          <div class="form-group"><label>Client Name *</label><input id="f-name" type="text" placeholder="Maria Rivera" value="${STATE.clientName}"/><div class="field-hint" id="h-name"></div></div>
+          <div class="form-group"><label>UAP Number *</label><input id="f-uap" type="text" placeholder="847221" value="${STATE.uapNumber}"/><div class="field-hint" id="h-uap"></div></div>
           <div class="form-group"><label>Program *</label>
             <select id="f-prog">${PROGRAMS.map(p=>`<option value="${p}"${STATE.program===p?' selected':''}>${p}</option>`).join('')}</select>
           </div>
@@ -308,21 +315,53 @@ function step1(){
       </div>
     </div>
     <div class="footer-bar">
-      <span style="color:var(--gray-400);font-size:12px">* Required fields</span>
-      <button class="btn btn-primary" id="s1-next" disabled>Continue to AI Processing →</button>
+      <span class="footer-hint" id="s1-hint">* Required fields</span>
+      <button class="btn btn-primary" id="s1-next">Continue to AI Processing →</button>
     </div>`;
 
   const nextBtn=wrap.querySelector('#s1-next');
+  const hint=wrap.querySelector('#s1-hint');
   const zone=wrap.querySelector('#uzone');
   const finp=wrap.querySelector('#file-inp');
   const finfo=wrap.querySelector('#finfo');
+  const nameInp=wrap.querySelector('#f-name');
+  const uapInp=wrap.querySelector('#f-uap');
+  let attempted=false; // only flag individual fields after the user tries to continue
+
+  // Single source of truth for what blocks moving on to AI Processing.
+  // Returns {missing:[{id,label,el}], demoFile:bool}
+  function getMissing(){
+    const missing=[];
+    if(!nameInp.value.trim())missing.push({id:'name',label:'Client Name',el:nameInp});
+    if(!uapInp.value.trim())missing.push({id:'uap',label:'UAP Number',el:uapInp});
+    return {missing,demoFile:!STATE.file};
+  }
 
   function checkReady(){
-    const n=wrap.querySelector('#f-name').value.trim();
-    const u=wrap.querySelector('#f-uap').value.trim();
-    nextBtn.disabled=!(n&&u&&STATE.file);
+    const {missing,demoFile}=getMissing();
+    // Per-field flags (shown after first attempt so the form isn't red on load)
+    [['name',nameInp],['uap',uapInp]].forEach(([id,el])=>{
+      const bad=attempted&&missing.some(m=>m.id===id);
+      el.classList.toggle('is-missing',bad);
+      wrap.querySelector('#h-'+id).textContent=bad?'Required to continue':'';
+    });
+    // Footer hint: always tells the user what is still needed
+    if(missing.length){
+      hint.className='footer-hint missing';
+      hint.innerHTML=`⚠️ Missing: <strong>${missing.map(m=>m.label).join(', ')}</strong>`;
+    }else if(demoFile){
+      hint.className='footer-hint demo';
+      hint.innerHTML='ℹ️ No PDF uploaded — a demo packet will be used';
+    }else{
+      hint.className='footer-hint ready';
+      hint.innerHTML='✓ Ready — all required information provided';
+    }
+    nextBtn.title=missing.length?'Missing: '+missing.map(m=>m.label).join(', '):'';
   }
-  wrap.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',checkReady));
+  wrap.querySelectorAll('input,select').forEach(i=>{
+    i.addEventListener('input',checkReady);
+    i.addEventListener('change',checkReady);
+  });
 
   function loadFile(file){
     if(!file||file.type!=='application/pdf'){showToast('Please upload a PDF file only.','error');return}
@@ -342,26 +381,29 @@ function step1(){
   wrap.querySelector('#fremove').addEventListener('click',()=>{STATE.file=null;finfo.style.display='none';zone.style.display='';checkReady()});
 
   nextBtn.addEventListener('click',()=>{
-    STATE.clientName=wrap.querySelector('#f-name').value.trim();
-    STATE.uapNumber=wrap.querySelector('#f-uap').value.trim();
+    attempted=true;
+    const {missing}=getMissing();
+    if(missing.length){
+      // Don't continue — tell the user exactly what is needed and take them to it
+      checkReady();
+      showToast('Cannot continue — missing: '+missing.map(m=>m.label).join(', '),'error',4500);
+      missing[0].el.focus();
+      missing[0].el.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+    STATE.clientName=nameInp.value.trim();
+    STATE.uapNumber=uapInp.value.trim();
     STATE.program=wrap.querySelector('#f-prog').value;
     STATE.intakeDate=wrap.querySelector('#f-date').value;
     STATE.notes=wrap.querySelector('#f-notes').value.trim();
     // Demo: simulate file if none uploaded
     if(!STATE.file){
-      STATE.file={name:'UAP_847221_MariaRivera_Packet.pdf',size:2457600};
+      STATE.file={name:`UAP_${STATE.uapNumber}_${STATE.clientName.replace(/\s+/g,'')}_Packet.pdf`,size:2457600};
       showToast('Demo mode: packet loaded automatically','');
     }
     go(2);
   });
 
-  // Demo mode: enable button if name+uap filled (no file required)
-  function checkReady(){
-    const n=wrap.querySelector('#f-name').value.trim();
-    const u=wrap.querySelector('#f-uap').value.trim();
-    nextBtn.disabled=!(n&&u);
-  }
-  wrap.querySelectorAll('input,select').forEach(i=>i.addEventListener('input',checkReady));
   checkReady();
   return wrap;
 }

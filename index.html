@@ -136,10 +136,25 @@ tbody tr:last-child td{border-bottom:none}
 .comm-msg.inn{align-self:flex-start;background:var(--gray-100);border-bottom-left-radius:2px}
 .comm-meta{font-size:11px;opacity:.7;margin-top:3px}
 
-/* Status dot */
-.case-status{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
-.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
-.dot-red{background:var(--red)}.dot-orange{background:var(--orange)}.dot-green{background:var(--green)}
+/* Application status */
+.st-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
+.st-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}
+.st-ready_crm{background:var(--green-bg);color:var(--green)}
+.st-needs_review{background:var(--red-bg);color:var(--red)}
+.st-state{background:#ede9fe;color:#6d28d9}
+.st-mgmt{background:#fce7f3;color:#be185d}
+.st-crm_sup{background:#ccfbf1;color:#0f766e}
+.st-crm_processed{background:#e2e8f0;color:#334155}
+.st-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:18px}
+.st-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--orange-bg);color:var(--orange)}
+.st-legend{display:flex;flex-direction:column;gap:6px}
+.st-legend-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--gray-600)}
+.st-legend-row.current{background:var(--gray-100);color:var(--gray-900);font-weight:600}
+.st-legend-row .st-badge{min-width:190px}
+.ov-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 14px}
+.ov-grid label{display:flex;align-items:center;gap:6px;text-transform:none;letter-spacing:0;font-size:13px;font-weight:400;cursor:pointer}
+.ov-grid input{width:15px;height:15px}
+@media(max-width:700px){.st-grid{grid-template-columns:1fr}.ov-grid{grid-template-columns:1fr 1fr}.st-legend-row{flex-wrap:wrap}.st-legend-row .st-badge{min-width:0}}
 
 /* Footer bar */
 .footer-bar{background:#fff;border-top:1px solid var(--gray-200);padding:13px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;bottom:0;z-index:50;box-shadow:0 -2px 8px rgba(0,0,0,.05)}
@@ -185,6 +200,14 @@ const MOCK_DOCS = [
   {id:5,type:'Lease',           pages:'10–12',confidence:95,checked:true},
   {id:6,type:'Photo ID',        pages:'13',   confidence:91,checked:true},
 ];
+const APP_STATUSES = [
+  {key:'ready_crm',    label:'Ready for CRM',               desc:'Packet complete, all looks good, ready to enter in the CRM'},
+  {key:'needs_review', label:'Needs Review',                desc:'Missing documents, or a new document came in that needs review'},
+  {key:'state',        label:'Awaiting State Verification', desc:'Zero income verification'},
+  {key:'mgmt',         label:'Management Review',           desc:'Management review needed'},
+  {key:'crm_sup',      label:'CRM Sup Review',              desc:'App under supervisor review in the CRM'},
+  {key:'crm_processed',label:'CRM Processed',               desc:'Marked as processed in the intake app once pushed to Ready for Payment in the CRM'},
+];
 const MOCK_CONTACT = {phone:'(201) 555-0182',email:'maria.rivera@email.com',language:'Spanish'};
 const STEPS_META = [
   {n:1,label:'Case & Upload'},
@@ -205,6 +228,10 @@ function confLbl(s){return s>=95?'Auto Accept':s>=80?'Optional Review':'Manual R
 function stCls(s){return s>=95?'auto':s>=80?'review':'manual'}
 function stLbl(s){return s>=95?'Auto':s>=80?'Review':'Manual'}
 
+function esc(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function statusOf(k){return APP_STATUSES.find(s=>s.key===k)||APP_STATUSES[0]}
+function stBadge(k){return `<span class="st-badge st-${k}">${statusOf(k).label}</span>`}
+
 function showToast(msg,type='',dur=3200){
   const c=document.getElementById('toast-container');
   const icons={success:'✅',error:'❌',warning:'⚠️','':'💬'};
@@ -218,7 +245,8 @@ function showToast(msg,type='',dur=3200){
 // ── App State ──────────────────────────────────────────────────────────────────
 let STATE = {
   clientName:'Maria Rivera',uapNumber:'847221',program:'UAP',
-  intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[]
+  intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[],
+  appStatus:null,statusHistory:[],missingOverride:null
 };
 let STEP = 1;
 
@@ -848,8 +876,12 @@ function step4(){
 // ── STEP 5: Communication ─────────────────────────────────────────────────────
 function step5(){
   const wrap=document.createElement('div');
-  const missing=MOCK_DOCS.filter(d=>!d.checked||d.confidence<80).map(d=>d.type);
-  let msgs=[];
+  // Missing = expected document types staff did not confirm in Step 3, plus anything flagged by the override.
+  // Same rule the Case Status dashboard uses, so both screens report the same list.
+  const confirmedTypes=new Set((STATE.confirmedDocs||[]).map(d=>d.type));
+  const missing=MOCK_DOCS.filter(d=>!confirmedTypes.has(d.type)).map(d=>d.type);
+  if(STATE.missingOverride)STATE.missingOverride.docs.forEach(t=>{if(!missing.includes(t))missing.push(t)});
+  let msgs=STATE.commsLog||[];
 
   function draw(){
     wrap.innerHTML=`
@@ -858,7 +890,7 @@ function step5(){
         <div class="section-sub">Request missing documents from ${STATE.clientName}</div></div>
         <button class="btn btn-secondary btn-sm" id="skip-btn">Skip →</button>
       </div>
-      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Missing / low-confidence:</strong> ${missing.join(', ')}</div></div>`
+      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Missing:</strong> ${missing.map(esc).join(', ')}</div></div>`
         :`<div class="alert alert-success">✅ All documents present. Communication is optional.</div>`}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
         <div class="card">
@@ -866,7 +898,7 @@ function step5(){
           <div class="card-body">
             <div class="form-group" style="margin-bottom:12px">
               <label>Message</label>
-              <textarea id="msg-txt" rows="4" placeholder="Please submit your most recent pay stub.">${missing.length?'Please submit your most recent '+missing[0].toLowerCase()+'.':''}</textarea>
+              <textarea id="msg-txt" rows="4" placeholder="Please submit your most recent pay stub.">${missing.length?esc('Please submit your most recent '+missing[0].toLowerCase()+'.'):''}</textarea>
             </div>
             <div class="form-group" style="margin-bottom:12px">
               <label>Send Via</label>
@@ -951,76 +983,215 @@ Thank you.
 // ── STEP 6: Status ────────────────────────────────────────────────────────────
 function step6(){
   const wrap=document.createElement('div');
-  const hasComms=(STATE.commsLog||[]).length>0;
-  const allSaved=(STATE.confirmedDocs||[]).length>=MOCK_DOCS.length;
-  const sc=hasComms&&!allSaved?'orange':allSaved?'green':'red';
-  const sl={red:'Missing Required Documentation',orange:'Pending Review — New Documents Received',green:'Ready for Processing'};
+  let ovOpen=false;
 
-  wrap.innerHTML=`
+  // System-suggested status, used until staff set one manually
+  function autoStatus(){
+    const allSaved=(STATE.confirmedDocs||[]).length>=MOCK_DOCS.length;
+    const missing=!allSaved||!!STATE.missingOverride;
+    return missing?'needs_review':'ready_crm';
+  }
+  function currentStatus(){return STATE.appStatus||autoStatus()}
+  function newDocIn(){return (STATE.commsLog||[]).some(m=>m.dir==='in')}
+  function setStatus(key,note){
+    STATE.appStatus=key;
+    STATE.statusHistory.unshift({status:key,by:'J. Martinez',time:today()+' '+nowTime(),note:note||''});
+  }
+
+  function draw(){
+    const cs=currentStatus();
+    const systemComplete=(STATE.confirmedDocs||[]).length>=MOCK_DOCS.length;
+    const ov=STATE.missingOverride;
+    const comms=STATE.commsLog||[];
+
+    wrap.innerHTML=`
     <div class="section-header">
       <div><div class="section-title">📊 Case Status Dashboard</div>
-      <div class="section-sub">Final summary for ${STATE.clientName}</div></div>
-      <div class="case-status"><div class="dot dot-${sc}"></div><span>${sl[sc]}</span></div>
+      <div class="section-sub">Final summary for ${esc(STATE.clientName)}</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stBadge(cs)}${cs==='needs_review'&&newDocIn()?'<span class="st-chip">📥 New document received</span>':''}</div>
     </div>
     <div class="metrics-bar">
       <div class="metric-card"><div class="metric-val">${(STATE.confirmedDocs||[]).length}</div><div class="metric-lbl">Docs Saved</div></div>
-      <div class="metric-card"><div class="metric-val">${(STATE.commsLog||[]).length}</div><div class="metric-lbl">Messages Sent</div></div>
+      <div class="metric-card"><div class="metric-val">${comms.length}</div><div class="metric-lbl">Messages</div></div>
       <div class="metric-card"><div class="metric-val">12s</div><div class="metric-lbl">AI Process Time</div></div>
       <div class="metric-card"><div class="metric-val">~11 min</div><div class="metric-lbl">Time Saved</div></div>
     </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🏷️ Application Status</span>
+        <span class="chip">${STATE.appStatus?'Set manually':'System suggested'}</span>
+      </div>
+      <div class="card-body">
+        <div class="st-grid">
+          <div>
+            <div class="form-group" style="margin-bottom:10px">
+              <label>Current Status</label>
+              <select id="st-sel">${APP_STATUSES.map(s=>`<option value="${s.key}"${s.key===cs?' selected':''}>${s.label}</option>`).join('')}</select>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+              <label>Status Note (Optional)</label>
+              <input id="st-note" type="text" placeholder="e.g. Sent to supervisor queue in CRM"/>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="st-save">Update Status</button>
+              ${STATE.appStatus?`<button class="btn btn-secondary btn-sm" id="st-auto">↺ Use System Status</button>`:''}
+            </div>
+            ${STATE.statusHistory.length?`
+            <div style="margin-top:16px">
+              <label>Status History</label>
+              <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">
+                ${STATE.statusHistory.map(h=>`<div style="font-size:12px;color:var(--gray-600)">
+                  ${stBadge(h.status)} <span style="margin-left:4px">${esc(h.time)} · ${esc(h.by)}</span>
+                  ${h.note?`<div style="margin:2px 0 0 4px;color:var(--gray-700)">${esc(h.note)}</div>`:''}
+                </div>`).join('')}
+              </div>
+            </div>`:''}
+          </div>
+          <div class="st-legend">
+            ${APP_STATUSES.map(s=>`<div class="st-legend-row${s.key===cs?' current':''}">${stBadge(s.key)}<span>${s.desc}</span></div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">🚩 Missing Document Override</span>
+        <span class="chip">System check: ${systemComplete?'Complete':'Incomplete'}</span>
+      </div>
+      <div class="card-body">
+        ${ov?`
+          <div class="alert alert-error">🚩 <div>
+            <strong>Override active — case set to Needs Review (missing documents).</strong><br/>
+            Missing: ${ov.docs.map(esc).join(', ')}<br/>
+            Reason: ${esc(ov.reason)}<br/>
+            <span style="font-size:12px">Flagged by ${esc(ov.by)} · ${esc(ov.time)}</span>
+          </div></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" id="ov-request">💬 Request Documents from Client</button>
+            <button class="btn btn-secondary btn-sm" id="ov-clear">✕ Clear Override</button>
+          </div>`
+        :!ovOpen?`
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div style="font-size:13px;color:var(--gray-600)">
+              ${systemComplete
+                ?'The system marked this application <strong>complete</strong>. If documents are actually missing or unusable, flag them here.'
+                :'The system already detected missing documents. You can flag additional documents here.'}
+            </div>
+            <button class="btn btn-secondary btn-sm" id="ov-open">🚩 Flag Missing Documents</button>
+          </div>`
+        :`
+          <div style="font-size:13px;color:var(--gray-600)">Select the documents that are missing, expired, or unreadable:</div>
+          <div class="ov-grid">
+            ${DOC_TYPES.filter(t=>t!=='Other').map(t=>`<label><input type="checkbox" class="ov-doc" value="${t}"/> ${t}</label>`).join('')}
+          </div>
+          <div class="form-grid" style="margin-bottom:12px">
+            <div class="form-group"><label>Other Document</label><input id="ov-other" type="text" placeholder="e.g. Proof of household size"/></div>
+            <div class="form-group"><label>Reason *</label><input id="ov-reason" type="text" placeholder="e.g. Utility bill is older than 30 days"/></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" id="ov-apply">Apply Override</button>
+            <button class="btn btn-secondary btn-sm" id="ov-cancel">Cancel</button>
+          </div>`}
+      </div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
       <div class="card">
         <div class="card-header"><span class="card-title">📂 Final Folder Structure</span></div>
         <div class="card-body"><div class="folder-tree">
           <div class="f-folder">📁 PACO Document Intake/</div>
-          <div class="f-folder" style="padding-left:18px">📁 UAP Applications / ${new Date().getFullYear()} / ${STATE.program}/</div>
-          <div class="f-folder" style="padding-left:36px">📁 ${STATE.uapNumber}_${STATE.clientName.replace(/ /g,'_')}/</div>
+          <div class="f-folder" style="padding-left:18px">📁 UAP Applications / ${new Date().getFullYear()} / ${esc(STATE.program)}/</div>
+          <div class="f-folder" style="padding-left:36px">📁 ${esc(STATE.uapNumber)}_${esc(STATE.clientName.replace(/ /g,'_'))}/</div>
           <div class="f-file" style="padding-left:54px">📄 ORIGINAL_PACKET.pdf</div>
           ${(STATE.confirmedDocs||[]).map(d=>`<div class="f-file" style="padding-left:54px">📄 ${d.type.replace(/ /g,'')}.pdf</div>`).join('')}
-          <div class="f-comm" style="padding-left:54px">📁 Communications/ (${(STATE.commsLog||[]).length} logs)</div>
+          <div class="f-comm" style="padding-left:54px">📁 Communications/ (${comms.length} logs)</div>
         </div></div>
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">🔔 Notifications & Summary</span></div>
         <div class="card-body">
           <div class="alert alert-success">✅ Case saved to SharePoint successfully</div>
-          ${hasComms?`<div class="alert alert-info">📨 ${(STATE.commsLog||[]).length} message(s) sent to ${STATE.clientName}</div>`:''}
+          ${comms.length?`<div class="alert alert-info">📨 ${comms.length} message(s) sent to ${esc(STATE.clientName)}</div>`:''}
           <div class="alert alert-info">📣 Teams notification sent to intake team</div>
           <hr style="border:none;border-top:1px solid var(--gray-200);margin:14px 0"/>
           <div style="font-size:13px;color:var(--gray-700);line-height:2.1">
-            <b>Client:</b> ${STATE.clientName}<br/>
-            <b>UAP #:</b> ${STATE.uapNumber}<br/>
-            <b>Program:</b> ${STATE.program}<br/>
+            <b>Client:</b> ${esc(STATE.clientName)}<br/>
+            <b>UAP #:</b> ${esc(STATE.uapNumber)}<br/>
+            <b>Program:</b> ${esc(STATE.program)}<br/>
+            <b>Status:</b> ${statusOf(cs).label}<br/>
             <b>Processed By:</b> J. Martinez<br/>
             <b>Date:</b> ${today()}
           </div>
         </div>
       </div>
     </div>
-    ${(STATE.commsLog||[]).length?`
+    ${comms.length?`
     <div class="card">
       <div class="card-header"><span class="card-title">📋 Communication Log</span></div>
       <div class="card-body">
         <div class="tbl-wrap"><table>
           <thead><tr><th>Time</th><th>Direction</th><th>Channel</th><th>Message</th></tr></thead>
-          <tbody>${(STATE.commsLog||[]).map(m=>`<tr>
+          <tbody>${comms.map(m=>`<tr>
             <td>${m.time}</td>
             <td><span class="status-badge ${m.dir==='out'?'auto':'review'}">${m.dir==='out'?'Outbound':'Inbound'}</span></td>
             <td>${m.via}</td>
-            <td style="max-width:320px;font-size:13px">${m.text}</td>
+            <td style="max-width:320px;font-size:13px">${esc(m.text)}</td>
           </tr>`).join('')}</tbody>
         </table></div>
       </div>
     </div>`:''}
     <div class="footer-bar">
-      <span style="color:var(--gray-400);font-size:12px">Case ${STATE.uapNumber} complete · ${today()}</span>
+      <span style="color:var(--gray-400);font-size:12px">Case ${esc(STATE.uapNumber)} · ${statusOf(cs).label} · ${today()}</span>
       <button class="btn btn-primary" id="restart-btn">＋ Process New Packet</button>
     </div>`;
 
-  wrap.querySelector('#restart-btn').addEventListener('click',()=>{
-    STATE={clientName:'',uapNumber:'',program:'UAP',intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[]};
-    go(1);
-  });
+    const $=sel=>wrap.querySelector(sel);
+
+    $('#st-save').addEventListener('click',()=>{
+      const key=$('#st-sel').value;
+      if(key==='crm_processed'&&STATE.missingOverride){
+        showToast('Clear the missing document override before marking CRM Processed.','warning');return;
+      }
+      setStatus(key,$('#st-note').value.trim());
+      showToast('Status updated: '+statusOf(key).label,'success');draw();
+    });
+    if($('#st-auto'))$('#st-auto').addEventListener('click',()=>{
+      STATE.appStatus=null;
+      showToast('Using system status: '+statusOf(autoStatus()).label,'');draw();
+    });
+
+    if($('#ov-open'))$('#ov-open').addEventListener('click',()=>{ovOpen=true;draw()});
+    if($('#ov-cancel'))$('#ov-cancel').addEventListener('click',()=>{ovOpen=false;draw()});
+    if($('#ov-apply'))$('#ov-apply').addEventListener('click',()=>{
+      const docs=[...wrap.querySelectorAll('.ov-doc:checked')].map(c=>c.value);
+      const other=$('#ov-other').value.trim();
+      if(other)docs.push(other);
+      const reason=$('#ov-reason').value.trim();
+      if(!docs.length){showToast('Select at least one missing document.','warning');return}
+      if(!reason){showToast('Enter a reason for the override.','warning');return}
+      STATE.missingOverride={docs,reason,by:'J. Martinez',time:today()+' '+nowTime()};
+      STATE.appStatus=null;
+      STATE.statusHistory.unshift({status:autoStatus(),by:'J. Martinez',time:today()+' '+nowTime(),note:'Override: '+docs.join(', ')+' — '+reason});
+      ovOpen=false;
+      showToast('Case flagged as Needs Review','warning');draw();
+    });
+    if($('#ov-request'))$('#ov-request').addEventListener('click',()=>go(5));
+    if($('#ov-clear'))$('#ov-clear').addEventListener('click',()=>{
+      STATE.missingOverride=null;
+      STATE.appStatus=null;
+      STATE.statusHistory.unshift({status:autoStatus(),by:'J. Martinez',time:today()+' '+nowTime(),note:'Missing document override cleared'});
+      showToast('Override cleared','');draw();
+    });
+
+    $('#restart-btn').addEventListener('click',()=>{
+      STATE={clientName:'',uapNumber:'',program:'UAP',intakeDate:today(),notes:'',file:null,confirmedDocs:[],commsLog:[],
+        appStatus:null,statusHistory:[],missingOverride:null};
+      go(1);
+    });
+  }
+  draw();
   return wrap;
 }
 

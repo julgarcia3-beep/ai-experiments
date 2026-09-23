@@ -2,6 +2,27 @@
 
 Automation experiments for the AI Data Hub workflow.
 
+## Intake App Prototype (`index.html`)
+
+PACO Smart Packet Processor: a single-file prototype of the UAP document intake flow
+(upload → AI processing → review → save to SharePoint → communication → case status).
+It is a design mock-up with no backend; the live intake app is a separate project.
+
+### Application statuses (Case Status dashboard)
+
+| Status | Meaning | Set by |
+|---|---|---|
+| Ready for CRM | Packet complete, all looks good, ready to enter in the CRM | Automatic when nothing is missing |
+| Needs Review | Missing documents, or a new document came in that needs review | Automatic (missing docs / override / client reply) |
+| Awaiting State Verification | Zero income verification | Staff |
+| Management Review | Management review needed | Staff |
+| CRM Sup Review | App under supervisor review in the CRM | Staff |
+| CRM Processed | Marked as processed once pushed to Ready for Payment in the CRM | Staff; blocked while a missing-document override is active |
+
+The **Missing Document Override** on the dashboard lets staff flag a case the system marked
+complete; it moves the case to Needs Review and carries the flagged documents into the
+Communication step.
+
 ## Research Loop Scan
 
 Automated nightly scanner that reads Obsidian daily notes for research tags and

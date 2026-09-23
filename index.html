@@ -144,14 +144,14 @@ tbody tr:last-child td{border-bottom:none}
 /* Application status */
 .st-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .st-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}
-.st-pending{background:var(--blue-light);color:var(--blue-dark)}
-.st-missing{background:var(--red-bg);color:var(--red)}
-.st-resubmitted{background:var(--orange-bg);color:var(--orange)}
+.st-ready_crm{background:var(--green-bg);color:var(--green)}
+.st-needs_review{background:var(--red-bg);color:var(--red)}
 .st-state{background:#ede9fe;color:#6d28d9}
 .st-mgmt{background:#fce7f3;color:#be185d}
-.st-supervisor{background:#ccfbf1;color:#0f766e}
-.st-processed{background:var(--green-bg);color:var(--green)}
+.st-crm_sup{background:#ccfbf1;color:#0f766e}
+.st-crm_processed{background:#e2e8f0;color:#334155}
 .st-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:18px}
+.st-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;background:var(--orange-bg);color:var(--orange)}
 .st-legend{display:flex;flex-direction:column;gap:6px}
 .st-legend-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;font-size:12px;color:var(--gray-600)}
 .st-legend-row.current{background:var(--gray-100);color:var(--gray-900);font-weight:600}
@@ -206,13 +206,12 @@ const MOCK_DOCS = [
   {id:6,type:'Photo ID',        pages:'13',   confidence:91,checked:true},
 ];
 const APP_STATUSES = [
-  {key:'pending',    label:'Pending Processing',          desc:'New UAP added to the Intake app that needs review & processing'},
-  {key:'missing',    label:'Missing Documents',           desc:'App processed, but missing docs'},
-  {key:'resubmitted',label:'Resubmitted',                 desc:'Incomplete app that has a new document that needs to be reviewed'},
-  {key:'state',      label:'Awaiting State Verification', desc:'Zero income verification'},
-  {key:'mgmt',       label:'Management Review',           desc:'Management review needed'},
-  {key:'supervisor', label:'Supervisor Review',           desc:'App under supervisor review in the CRM'},
-  {key:'processed',  label:'Processed',                   desc:'Pushed to Ready for Payment in the CRM'},
+  {key:'ready_crm',    label:'Ready for CRM',               desc:'Packet complete, all looks good, ready to enter in the CRM'},
+  {key:'needs_review', label:'Needs Review',                desc:'Missing documents, or a new document came in that needs review'},
+  {key:'state',        label:'Awaiting State Verification', desc:'Zero income verification'},
+  {key:'mgmt',         label:'Management Review',           desc:'Management review needed'},
+  {key:'crm_sup',      label:'CRM Sup Review',              desc:'App under supervisor review in the CRM'},
+  {key:'crm_processed',label:'CRM Processed',               desc:'Marked as processed in the intake app once pushed to Ready for Payment in the CRM'},
 ];
 const MOCK_CONTACT = {phone:'(201) 555-0182',email:'maria.rivera@email.com',language:'Spanish'};
 const STEPS_META = [
@@ -992,10 +991,10 @@ function step6(){
   function autoStatus(){
     const allSaved=(STATE.confirmedDocs||[]).length>=MOCK_DOCS.length;
     const missing=!allSaved||!!STATE.missingOverride;
-    const newDocIn=(STATE.commsLog||[]).some(m=>m.dir==='in');
-    return missing&&newDocIn?'resubmitted':missing?'missing':'pending';
+    return missing?'needs_review':'ready_crm';
   }
   function currentStatus(){return STATE.appStatus||autoStatus()}
+  function newDocIn(){return (STATE.commsLog||[]).some(m=>m.dir==='in')}
   function setStatus(key,note){
     STATE.appStatus=key;
     STATE.statusHistory.unshift({status:key,by:'J. Martinez',time:today()+' '+nowTime(),note:note||''});
@@ -1011,7 +1010,7 @@ function step6(){
     <div class="section-header">
       <div><div class="section-title">📊 Case Status Dashboard</div>
       <div class="section-sub">Final summary for ${esc(STATE.clientName)}</div></div>
-      ${stBadge(cs)}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stBadge(cs)}${cs==='needs_review'&&newDocIn()?'<span class="st-chip">📥 New document received</span>':''}</div>
     </div>
     <div class="metrics-bar">
       <div class="metric-card"><div class="metric-val">${(STATE.confirmedDocs||[]).length}</div><div class="metric-lbl">Docs Saved</div></div>
@@ -1066,7 +1065,7 @@ function step6(){
       <div class="card-body">
         ${ov?`
           <div class="alert alert-error">🚩 <div>
-            <strong>Override active — case flagged as missing documents.</strong><br/>
+            <strong>Override active — case set to Needs Review (missing documents).</strong><br/>
             Missing: ${ov.docs.map(esc).join(', ')}<br/>
             Reason: ${esc(ov.reason)}<br/>
             <span style="font-size:12px">Flagged by ${esc(ov.by)} · ${esc(ov.time)}</span>
@@ -1154,8 +1153,8 @@ function step6(){
 
     $('#st-save').addEventListener('click',()=>{
       const key=$('#st-sel').value;
-      if(key==='processed'&&STATE.missingOverride){
-        showToast('Clear the missing document override before marking Processed.','warning');return;
+      if(key==='crm_processed'&&STATE.missingOverride){
+        showToast('Clear the missing document override before marking CRM Processed.','warning');return;
       }
       setStatus(key,$('#st-note').value.trim());
       showToast('Status updated: '+statusOf(key).label,'success');draw();
@@ -1178,7 +1177,7 @@ function step6(){
       STATE.appStatus=null;
       STATE.statusHistory.unshift({status:autoStatus(),by:'J. Martinez',time:today()+' '+nowTime(),note:'Override: '+docs.join(', ')+' — '+reason});
       ovOpen=false;
-      showToast('Case flagged as Missing Documents','warning');draw();
+      showToast('Case flagged as Needs Review','warning');draw();
     });
     if($('#ov-request'))$('#ov-request').addEventListener('click',()=>go(5));
     if($('#ov-clear'))$('#ov-clear').addEventListener('click',()=>{

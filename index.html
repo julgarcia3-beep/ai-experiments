@@ -136,11 +136,6 @@ tbody tr:last-child td{border-bottom:none}
 .comm-msg.inn{align-self:flex-start;background:var(--gray-100);border-bottom-left-radius:2px}
 .comm-meta{font-size:11px;opacity:.7;margin-top:3px}
 
-/* Status dot */
-.case-status{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600}
-.dot{width:12px;height:12px;border-radius:50%;flex-shrink:0}
-.dot-red{background:var(--red)}.dot-orange{background:var(--orange)}.dot-green{background:var(--green)}
-
 /* Application status */
 .st-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;white-space:nowrap}
 .st-badge::before{content:'';width:8px;height:8px;border-radius:50%;background:currentColor}
@@ -881,7 +876,10 @@ function step4(){
 // ── STEP 5: Communication ─────────────────────────────────────────────────────
 function step5(){
   const wrap=document.createElement('div');
-  const missing=MOCK_DOCS.filter(d=>!d.checked||d.confidence<80).map(d=>d.type);
+  // Missing = expected document types staff did not confirm in Step 3, plus anything flagged by the override.
+  // Same rule the Case Status dashboard uses, so both screens report the same list.
+  const confirmedTypes=new Set((STATE.confirmedDocs||[]).map(d=>d.type));
+  const missing=MOCK_DOCS.filter(d=>!confirmedTypes.has(d.type)).map(d=>d.type);
   if(STATE.missingOverride)STATE.missingOverride.docs.forEach(t=>{if(!missing.includes(t))missing.push(t)});
   let msgs=STATE.commsLog||[];
 
@@ -892,7 +890,7 @@ function step5(){
         <div class="section-sub">Request missing documents from ${STATE.clientName}</div></div>
         <button class="btn btn-secondary btn-sm" id="skip-btn">Skip →</button>
       </div>
-      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Missing / low-confidence:</strong> ${missing.map(esc).join(', ')}</div></div>`
+      ${missing.length?`<div class="alert alert-warning">⚠️ <div><strong>Missing:</strong> ${missing.map(esc).join(', ')}</div></div>`
         :`<div class="alert alert-success">✅ All documents present. Communication is optional.</div>`}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
         <div class="card">
@@ -1014,7 +1012,7 @@ function step6(){
     </div>
     <div class="metrics-bar">
       <div class="metric-card"><div class="metric-val">${(STATE.confirmedDocs||[]).length}</div><div class="metric-lbl">Docs Saved</div></div>
-      <div class="metric-card"><div class="metric-val">${comms.length}</div><div class="metric-lbl">Messages Sent</div></div>
+      <div class="metric-card"><div class="metric-val">${comms.length}</div><div class="metric-lbl">Messages</div></div>
       <div class="metric-card"><div class="metric-val">12s</div><div class="metric-lbl">AI Process Time</div></div>
       <div class="metric-card"><div class="metric-val">~11 min</div><div class="metric-lbl">Time Saved</div></div>
     </div>
